@@ -76,7 +76,7 @@
     <ul>
       <li>未初始化的全局变量和静态局部变量（包含存在与函数中的静态局部变量）</li>
       <li>初始值为0的全局变量和静态局部变量(包含存在与函数中的静态局部变量，gcc中测试是这种情况，依赖于编译器实现)
-使用objdump可以查看不同段的信息，例如查看bss段的信息：<code>objdump -j .bss -S test_bss.o</code>
+使用objdump可以查看不同段的信息，例如查看bss段的信息：<code class="highlighter-rouge">objdump -j .bss -S test_bss.o</code>
 BSS段中在可执行文件中不会为变量预先分配空间，只会记录变量在导入内存时需要的空间大小。</li>
     </ul>
   </li>
@@ -100,7 +100,7 @@ BSS段中在可执行文件中不会为变量预先分配空间，只会记录�
   <li>在所获得的内存上调用对象的构造函数，并返回对象指针</li>
 </ul>
 
-<p>对于第一步有两种实现方式，一种是使用 <code>void* operator new(std::size_t size)</code> 来分配内存（在clang中是使用malloc分配内存），另一种是operator new的重载形式<code>void* operator new(std::size_t, void* p)</code>, 称为<em>*placement   new</em> ***, clang里的实现是直接将输入的指针返回，使用场景是先预先获得一块内存的地址，然后将此内存地址传入<code>placement new</code>，调用对象构造函数在<code>placement new</code>返回的内存地址上构造对象。并将对象地址返回。</p>
+<p>对于第一步有两种实现方式，一种是使用 <code class="highlighter-rouge">void* operator new(std::size_t size)</code> 来分配内存（在clang中是使用malloc分配内存），另一种是operator new的重载形式<code class="highlighter-rouge">void* operator new(std::size_t, void* p)</code>, 称为<em>*placement   new</em> ***, clang里的实现是直接将输入的指针返回，使用场景是先预先获得一块内存的地址，然后将此内存地址传入<code class="highlighter-rouge">placement new</code>，调用对象构造函数在<code class="highlighter-rouge">placement new</code>返回的内存地址上构造对象。并将对象地址返回。</p>
 
 <p>从上面的描述可以看出new操作符不管第一步中获得的地址的来源是什么，只要内存地址是有效的则可以在其上调用对象构造函数构造对象。可以试着在栈上空间中构造对象。</p>
 

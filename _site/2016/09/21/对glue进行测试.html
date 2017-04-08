@@ -90,7 +90,7 @@
 
 <p>整个网络库都是基于reactor的模式来实现的，因此需要将事件逻辑以回调函数的方式来传递，不可避免的需要使用bind函数来对相应参数进行绑定，bind生成的functor对象内部有一个成员存储相应参数，该成员则以参数来进行构造，相当于是对输入参数进行拷贝，因此对于非指针对象应该以此对象的地址或者引用进行传输，比如glue中的Buffer对象在进行绑定时可以使用std::ref(buf)来进行传输，std::ref(buf) 会生成一个reference_wrapper object, 此object里面将会有一个成员为buf的引用，因此所生成的functor对象内部将会有相应的reference_wrapper object来间接对buf引用。</p>
 
-<p><strong>std::ref(T)的作用</strong> 对于常见的引用（T&amp;），不能被数组或者容器进行存储，而std::ref(T)可以; std::ref(T)内部存在一个<code>operator &amp;T() const noexcept</code>转换函数，因此std::ref(T)又可以被用在任何类型为T&amp;的地方。</p>
+<p><strong>std::ref(T)的作用</strong> 对于常见的引用（T&amp;），不能被数组或者容器进行存储，而std::ref(T)可以; std::ref(T)内部存在一个<code class="highlighter-rouge">operator &amp;T() const noexcept</code>转换函数，因此std::ref(T)又可以被用在任何类型为T&amp;的地方。</p>
 
         </section>
 

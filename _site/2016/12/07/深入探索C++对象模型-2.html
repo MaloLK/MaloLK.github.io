@@ -81,7 +81,7 @@
 <p>以下讨论基于当前的类中没有定义copy constructor
 <strong>Bitwise Copy Semantics</strong>
 如下面的class，在进行对象拷贝时，可以使用memove对其按位进行拷贝，即使生成默认的拷贝构造函数也是做相同的事情，在这种情况下，可以认为这个类是具有Bitwise Copy Semantics。</p>
-<pre><code>class Word {
+<div class="highlighter-rouge"><pre class="highlight"><code>class Word {
 public:
     Word(const char*);
     ~Word() { delete [] str; }
@@ -91,6 +91,7 @@ private:
     char *str;
 };
 </code></pre>
+</div>
 
 <p><strong>那什么时候Class不会具有Bitwise Copy Semantics?</strong></p>
 <ul>
@@ -112,13 +113,14 @@ private:
 
 <p>关于书中Copy Constructor(既可以是用户定义的，也可以是由编译器合成)会将NRV功能开启，网上说与copy constructor无关，但是这里存在一个疑问，当NRV优化使用时是不会调用copy constructor的，怎么证明NRV确实与Copy Constructor相关？当类中存在copy constructor时，经验证NRV优化确实已经开启，但是这并不能证明使用copy constructor将NRV优化功能开启。
 可以使用另外一种方式进行验证，假如有一下函数：</p>
-<pre><code>A process()
+<div class="highlighter-rouge"><pre class="highlight"><code>A process()
 {
     A a;
     ...
     return a;
 }
 </code></pre>
+</div>
 
 <p>如果NRV开启，这里的a在此时不会被析构掉，这个可以通过在类A的析构函数中打印内容进行验证，使用GDB来单步执行，会发现不管使不使用copy constructor，在process函数返回时，构造的对象a并没有被析构，说明使用了NRV优化。</p>
 

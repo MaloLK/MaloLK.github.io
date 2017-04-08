@@ -61,7 +61,7 @@
             <h4 id="memcachd守护进程的实现">memcachd守护进程的实现</h4>
 <p>为了摆脱控制终端对进程的影响，一般都是将进程变为守护进程。</p>
 
-<p>使用fork产生子进程，父进程使用_exit()退出，使用_exit()而不是exit是因为exit会进行额外的操作，比如反向执行使用<code>atexit</code>注册的函数，在linux中还会对标准输出和文件流进行flush操作。此时<strong>父进程先于子进程结束</strong>, 子进程将会变为孤儿进程，孤儿进程一般会将init进程作为父进程，与僵尸进程的区别是，<strong>子进程先于父进程结束</strong>，当子进程已经结束后，父进程没有使用wait等函数来获取终止子进程的信息以及清理子进程占用的资源（如回收进程列表信息）。</p>
+<p>使用fork产生子进程，父进程使用_exit()退出，使用_exit()而不是exit是因为exit会进行额外的操作，比如反向执行使用<code class="highlighter-rouge">atexit</code>注册的函数，在linux中还会对标准输出和文件流进行flush操作。此时<strong>父进程先于子进程结束</strong>, 子进程将会变为孤儿进程，孤儿进程一般会将init进程作为父进程，与僵尸进程的区别是，<strong>子进程先于父进程结束</strong>，当子进程已经结束后，父进程没有使用wait等函数来获取终止子进程的信息以及清理子进程占用的资源（如回收进程列表信息）。</p>
 
 <p>接下来在子进程中调用setsid使得子进程在新的会话(session)中运行。这里需要回顾一下进程组和会话的概念。</p>
 <blockquote>
@@ -145,9 +145,10 @@ int daemonize(int nochdir, int noclose)
 
 <h4 id="从linux-shell-中启动守护进程">从Linux shell 中启动守护进程</h4>
 <p>在实际使用中，如何在linux中最快速的将某个进程设置为守护进程？
-使用<code>nohup</code>命令可以帮助我们将进程变为守护进程。如下：</p>
-<pre><code class="language-sh">nohup your-porcess &amp;
+使用<code class="highlighter-rouge">nohup</code>命令可以帮助我们将进程变为守护进程。如下：</p>
+<div class="language-sh highlighter-rouge"><pre class="highlight"><code>nohup your-porcess &amp;
 </code></pre>
+</div>
 <p>当一个会话结束时，会向会话中的每个进程发送SIGHUP信号，这个信号会使得进程退出。因此这里使用nohup的意图就是阻止当前进程接收SIGHUP信号，另一个作用是关闭标准输入，即使这个进程运行在前台也接收不到输入，而标准输出和标准错误都将会被重定向到nohup.out中，这里可以自定义标准输出和标准错误的重定向。加上’&amp;’的作用则是将其变为后台进程。</p>
 
 <h4 id="参考">参考</h4>

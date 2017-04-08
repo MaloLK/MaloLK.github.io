@@ -73,12 +73,12 @@
 <p><strong>operator new</strong></p>
 <ul>
   <li>当要分配的大小为0时，operator new 将会分配一个字节的内存空间，并将其地址返回。</li>
-  <li>operator new 支持用户设置<code>_new_handler()</code>，当内存分配出现错误时这个函数将会被调用。</li>
+  <li>operator new 支持用户设置<code class="highlighter-rouge">_new_handler()</code>，当内存分配出现错误时这个函数将会被调用。</li>
 </ul>
 
 <p><strong>new 和数组</strong></p>
 <ul>
-  <li>对数组的分配和释放应该使用成对的格式。如<code>new arr[N]; ...; delete [] arr</code>。</li>
+  <li>对数组的分配和释放应该使用成对的格式。如<code class="highlighter-rouge">new arr[N]; ...; delete [] arr</code>。</li>
   <li>释放数组时，应该调用数组元素的实际类型，如下所示。
 ```
 class Point; // Base class

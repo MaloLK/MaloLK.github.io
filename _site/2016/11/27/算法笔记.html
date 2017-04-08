@@ -81,7 +81,7 @@ step4 针对S1和S2分别递归调用上述过程。</p>
 元素个数较小时，使用插入排序相比快排等递归算法更快。因此可以设定一个阈值，比如为10, 当小于阈值使用插入排序，否则使用快排。这样做的另一个好处是不用考虑在只有一两个元素时怎么求得pivot元素。</p>
 
 <p><strong>实现</strong></p>
-<pre><code>    ElementType median3(ElementType a[], int left, int right)
+<div class="highlighter-rouge"><pre class="highlight"><code>    ElementType median3(ElementType a[], int left, int right)
     {
         int center = (left + right)/2;
         
@@ -134,13 +134,14 @@ step4 针对S1和S2分别递归调用上述过程。</p>
         qsort(a, 0, n - 1);    
     }
 </code></pre>
+</div>
 
 <p><strong>算法复杂度分析</strong>
-假设S1的数组元素个数为i，则S2元素个数为N-i-1，T(N)代表元素个数为N时的时间复杂度。则有<code>T(N) = T(i) + T(N-i-1) + cN</code>。</p>
+假设S1的数组元素个数为i，则S2元素个数为N-i-1，T(N)代表元素个数为N时的时间复杂度。则有<code class="highlighter-rouge">T(N) = T(i) + T(N-i-1) + cN</code>。</p>
 <ul>
-  <li>最坏情况是，每次S2中的元素都为零，则有<code>T(N) = T(N-1) + cN</code>，通过递推求解这是一个O(N^2)的时间复杂度。</li>
-  <li>最好情况是，每次S1和S2中的元素个数都相等，则有<code>T(N) = 2T(N/2) + cN</code>，通过递归求解可知时间复杂度为O(NlogN)。</li>
-  <li>平均情况是，假如每次选择的pivot是随机的，那么S1中的元素个数为0～N中的一个数的概率是1/N，假如S1以1/N的概率获得了m个数，则其贡献给S1的时间复杂度为<code>(1/N)*T(m)</code>, 对于S2也有类似的假设。则有<code>T(N) = 2*(1/N)*SUM(T(m)) + cN</code>, 通过求解会发现时间复杂度为O(NlogN)。</li>
+  <li>最坏情况是，每次S2中的元素都为零，则有<code class="highlighter-rouge">T(N) = T(N-1) + cN</code>，通过递推求解这是一个O(N^2)的时间复杂度。</li>
+  <li>最好情况是，每次S1和S2中的元素个数都相等，则有<code class="highlighter-rouge">T(N) = 2T(N/2) + cN</code>，通过递归求解可知时间复杂度为O(NlogN)。</li>
+  <li>平均情况是，假如每次选择的pivot是随机的，那么S1中的元素个数为0～N中的一个数的概率是1/N，假如S1以1/N的概率获得了m个数，则其贡献给S1的时间复杂度为<code class="highlighter-rouge">(1/N)*T(m)</code>, 对于S2也有类似的假设。则有<code class="highlighter-rouge">T(N) = 2*(1/N)*SUM(T(m)) + cN</code>, 通过求解会发现时间复杂度为O(NlogN)。</li>
 </ul>
 
 <p><strong>快排用于寻找第K大的数（**平均时间复杂度为O(N)**）</strong>

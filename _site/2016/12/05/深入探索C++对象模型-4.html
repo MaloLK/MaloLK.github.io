@@ -108,7 +108,7 @@ C++的设计准则之一就是使得非静态成员函数的调用与使用非�
 <p>关于thunk的效率: thunk只有以assembly代码完成才有效率。现代的编译器真的能够有效的编译thunk吗？还是尽量避免这种多重继承吧。</p>
 
 <p>但是由于存在多个基类，那么可能同一个虚拟函数需要不同的slot内容，比如下面的情况。</p>
-<pre><code>/* 类Derived  继承两个基类 Base1 和 Base2 */
+<div class="highlighter-rouge"><pre class="highlight"><code>/* 类Derived  继承两个基类 Base1 和 Base2 */
 Base1 *pbase1 = new Derived;
 Base2 *pbase2 = new Derived;
 /* 不需要调整this指针，因为Base1和Derived的起始位置是一样的， 因此在vtbl中slot中直接存放derived的析构函数 */
@@ -116,6 +116,7 @@ delete pbase1;
 /* 需要将pbase2向后调整到Derived的对象的起始地址，然后再调用Derived的析构函数，因此在vtbl中的相应slot应该指向实现这个功能的thunk */
 delete pbase2;
 </code></pre>
+</div>
 
 <p>为了解决同一个虚拟函数可能被直接调用和使用thunk调用这两种情况，需要为每一个基类配置一个相应的virtual table，但是第一个base的起始地址和Derived的相同，因此第一个Base所占的subobject可以与Derived object共用一个virtual table。因此在单一继承的情况下，只需一个virtual table就够了。一般如果继承n个base时，则需要额外的n-1个virtual table。</p>
 
@@ -126,13 +127,14 @@ delete pbase2;
 
 <h4 id="指向member-function的指针">指向Member Function的指针</h4>
 <p>对非静态成员函数进行取地址操作，获得的是它在内存中的地址。但是这个地址是不完全的，需要绑定在某个对象中执行。</p>
-<pre><code>// 一个指向非静态成员函数的指针的声明
+<div class="highlighter-rouge"><pre class="highlight"><code>// 一个指向非静态成员函数的指针的声明
 double (Point::* pmf)();
 // 定义和初始化
 double (Point::* coord)() = &amp;Point::x;
 // 调用
 (ptr-&gt;*coord)();
 </code></pre>
+</div>
 
 <p>值得注意的是对virtual function进行取地址操作得到的是这个虚拟函数在virtual table中的索引值。</p>
 

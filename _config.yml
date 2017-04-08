@@ -3,7 +3,7 @@ description: "Liu Kai's blog"
 meta_description: "@malolk Liu Kai's blog"
 
 permalink: /:year/:month/:day/:title.html
-paginate: 15
+paginate: 10
 markdown: kramdown
 highlighter: rouge
 logo: false

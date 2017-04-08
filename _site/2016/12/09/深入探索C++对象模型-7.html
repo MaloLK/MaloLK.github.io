@@ -68,13 +68,15 @@
 
 <p><strong>Template 的“实例化“行为</strong>
 以下的指针初始化操作不会导致Template的实例化。</p>
-<pre><code>Point&lt; float &gt; *ptr = 0;
+<div class="highlighter-rouge"><pre class="highlight"><code>Point&lt; float &gt; *ptr = 0;
 </code></pre>
+</div>
 <p>因为一个指向class object的指针，本身并不是一个class object，编译器不需要知道与该class有关的任何members的数据或object布局数据。</p>
 
 <p>但是将上面的指针换为reference，则会有相应的Template被实例化。</p>
-<pre><code>Point&lt; float &gt; &amp;ptr = 0;
+<div class="highlighter-rouge"><pre class="highlight"><code>Point&lt; float &gt; &amp;ptr = 0;
 </code></pre>
+</div>
 <p>原因是reference必须绑定到一个对象上面，因此这里的0将被转化为Point&lt; float &gt;的对象，如果类中没有提供这个转化操作则会出现编译错误。</p>
 
 <p><strong>Template Member Function 的实例化</strong>
@@ -83,7 +85,7 @@ member functions只有当被使用时才会被实例化。</p>
 <p><strong>Template 中的名称决议法</strong></p>
 
 <p>在Template中，对于一个nonmember name的决议结果，是根据这个那么的使用是否与”用以实例化该template的参数类型“有关而决定的。如果使用不相关，那么就以”scope of the template declaration“ 来决定name。如果其使用互有关联，那么就以”scope of the template instantiation“ 来决定name。举个例子。</p>
-<pre><code>// scope of the template definition
+<div class="highlighter-rouge"><pre class="highlight"><code>// scope of the template definition
 extern double foo(double);
 
 template &lt;class type&gt;
@@ -118,6 +120,7 @@ ScopeRules&lt; double &gt; sr1;
 sr1.invarint(); // 调用 double foo(double);
 sr1.type_dependent(); // 调用 double foo(double);
 </code></pre>
+</div>
 
 <h3 id="异常处理">异常处理</h3>
 
@@ -128,16 +131,16 @@ sr1.type_dependent(); // 调用 double foo(double);
 <p>C++的RTTI机制提供了一个安全的downcast设备，但只对那些展现”多态“的类型有效。具体的实现是每个多态类型的对象中维护一个指针vptr指向virtual table，一般virtual table的第一个slot中存放与该class有关的类型信息RTTI object地址。这个信息只会被设定一次，是由编译器静态设定的。</p>
 
 <p><strong>Type-Safe Dynamic Cast</strong>
-<code>dynamic_cast</code> 运算符能够在执行期决定真正的类型。如果downcast是安全的（此时base pointer指向一个derived object），这个运算符会返回一个经过适当转换的指针；如果不是安全的，这个运算符会返回0。</p>
+<code class="highlighter-rouge">dynamic_cast</code> 运算符能够在执行期决定真正的类型。如果downcast是安全的（此时base pointer指向一个derived object），这个运算符会返回一个经过适当转换的指针；如果不是安全的，这个运算符会返回0。</p>
 
-<p><code>dynamic_cast</code> 实际的实现是取得指针所指对象的真正类型，这个类型信息的地址存在于vptr所指的virtual table的第一个slot中，类型信息类型为<code>type_info</code> object。<code>type_info</code>中一般存放的是相应类型的名字，<code>dynamic_cast</code> 取出输入的指针所指对象的类型信息和要转换的对象的类型信息进行比较，如果相等则说明是可以安全转换的并返回适当转换后的指针，否则返回0。</p>
+<p><code class="highlighter-rouge">dynamic_cast</code> 实际的实现是取得指针所指对象的真正类型，这个类型信息的地址存在于vptr所指的virtual table的第一个slot中，类型信息类型为<code class="highlighter-rouge">type_info</code> object。<code class="highlighter-rouge">type_info</code>中一般存放的是相应类型的名字，<code class="highlighter-rouge">dynamic_cast</code> 取出输入的指针所指对象的类型信息和要转换的对象的类型信息进行比较，如果相等则说明是可以安全转换的并返回适当转换后的指针，否则返回0。</p>
 
 <p><strong>References 并不是 Pointers</strong></p>
 
-<p><code>dynamic_cast</code> 也可以作用于reference，但是当不能安全转换时，并不能直接返回0,而是一个对象。因此，当能够安全的downcast，即输入的reference是参考到derived class，downcast会被安全执行。当不能够安全的downcast时，则会抛出一个<code>bad_cast exception</code>。</p>
+<p><code class="highlighter-rouge">dynamic_cast</code> 也可以作用于reference，但是当不能安全转换时，并不能直接返回0,而是一个对象。因此，当能够安全的downcast，即输入的reference是参考到derived class，downcast会被安全执行。当不能够安全的downcast时，则会抛出一个<code class="highlighter-rouge">bad_cast exception</code>。</p>
 
 <p><strong>Typeid 运算符</strong>
-使用typeid运算符能够取出指针或者reference所指代的对象的类型信息，传回一个const reference，类型为<code>type_info</code>。</p>
+使用typeid运算符能够取出指针或者reference所指代的对象的类型信息，传回一个const reference，类型为<code class="highlighter-rouge">type_info</code>。</p>
 
 <p>另外用于RTTI机制的这些运算符的具体的运行时间得看输入的指针或者reference所指代的对象是否是多态的。如果是则会在运行时期才能取得其类型信息，否则则会静态取得。</p>
 

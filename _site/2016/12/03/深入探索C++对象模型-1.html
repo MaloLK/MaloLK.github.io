@@ -102,13 +102,13 @@
 
 <p><strong>C++以下列方式支持多态</strong></p>
 <ul>
-  <li>经由一组隐式的转化操作，将drived class指针转化为一个base class指针。形如<code>shape *ps = new circle()</code></li>
+  <li>经由一组隐式的转化操作，将drived class指针转化为一个base class指针。形如<code class="highlighter-rouge">shape *ps = new circle()</code></li>
   <li>使用virtual机制，通过指针或者引用来调用相同的基类接口，但是由于指针或者引用所指实际对象既可能是基类对象也可以是子类对象，因此实际调用的函数会根据不同的对象采用不同的操作，尽管接口都是一样。</li>
-  <li>使用dynamic_cast和typeid运算符来判断实际对象的类型。形如<code>if(circle *pc = dynamic_cast&lt;circle*&gt;(ps)) ...</code></li>
+  <li>使用dynamic_cast和typeid运算符来判断实际对象的类型。形如<code class="highlighter-rouge">if(circle *pc = dynamic_cast&lt;circle*&gt;(ps)) ...</code></li>
 </ul>
 
 <p><strong>指针的类型</strong>
-指向不同的类型的指针的差异，既不在其指针的表示方法不同，也不在其内容（即对象的地址）的不同，而是在于其所寻址出来的object的类型的不同。也就是，指针所指的对象类型会教导编译器如何解释莫个特定地址中的内存内容及其大小。但是对于一个<code>void*</code>的指针，由于编译器无法知道实际所指的对象类型，因此这个指针只能够持有一个地址。
+指向不同的类型的指针的差异，既不在其指针的表示方法不同，也不在其内容（即对象的地址）的不同，而是在于其所寻址出来的object的类型的不同。也就是，指针所指的对象类型会教导编译器如何解释莫个特定地址中的内存内容及其大小。但是对于一个<code class="highlighter-rouge">void*</code>的指针，由于编译器无法知道实际所指的对象类型，因此这个指针只能够持有一个地址。
 在virtual机制中，使用指针调用基类的virtual函数时，得需要获得指针所指对象的类型，所指对象类型的信息存在于vptr和vtable之间。</p>
 
 <p><strong>多态</strong>

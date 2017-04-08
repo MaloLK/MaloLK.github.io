@@ -80,9 +80,9 @@
 
 <p><strong>初始化</strong> 如果类中定义了成员变量，则必须在类中为每个类提供初始化函数或定义一个构造函数。若未声明构造函数，则编译器会生成一个默认的构造函数，这有可能导致某些成员未被初始化或被初始化为不恰当的值。</p>
 
-<p>在类成员里面进行初始化是指声明一个成员变量的时候使用一个结构例如<code>int _count = 17</code>或者<code>string _name{"abc"}</code>来替代<code>int _count</code>或者<code>string _name</code>这样的形式。</p>
+<p>在类成员里面进行初始化是指声明一个成员变量的时候使用一个结构例如<code class="highlighter-rouge">int _count = 17</code>或者<code class="highlighter-rouge">string _name{"abc"}</code>来替代<code class="highlighter-rouge">int _count</code>或者<code class="highlighter-rouge">string _name</code>这样的形式。</p>
 
-<p><strong>显式构造函数</strong> 对单个参数的构造函数使用<code>C++</code>关键字<code>explici</code>。除单参数构造函数外，这一规则也适用于除第一个参数以外的其他参数都具有默认参数的构造函数。</p>
+<p><strong>显式构造函数</strong> 对单个参数的构造函数使用<code class="highlighter-rouge">C++</code>关键字<code class="highlighter-rouge">explici</code>。除单参数构造函数外，这一规则也适用于除第一个参数以外的其他参数都具有默认参数的构造函数。</p>
 
 <p><strong>可拷贝类型和可移动类型</strong> 如果你的类型需要, 就让它们支持拷贝/移动。否则，就把隐式产生的拷贝和移动函数禁用。
 一般都会将拷贝构造函数给禁掉。如果基类存在拷贝构造函数，那么对于子类来说，如果在实现子类的拷贝构造函数时忘了显示的调用基类的拷贝构造函数，编译器会在我们定义的子类拷贝构造函数中插入调用基类的默认构造函数，而不是基类的对应的拷贝构造函数。</p>
@@ -113,13 +113,13 @@
 
 <p><strong>运算符重载</strong> 除少数特定环境外，不要重载运算符。一般不要重载运算符. 尤其是赋值操作 (operator=) 比较诡异, 应避免重载. 如果需要的话, 可以定义类似 Equals(), CopyFrom() 等函数。</p>
 
-<p><strong>存取控制</strong> 将所有数据成员声明为 private, 并根据需要提供相应的存取函数. 例如, 某个名为<code>foo_</code>的变量, 其取值函数是<code>foo()</code>. 还可能需要一个赋值函数<code>set_foo()</code>.</p>
+<p><strong>存取控制</strong> 将所有数据成员声明为 private, 并根据需要提供相应的存取函数. 例如, 某个名为<code class="highlighter-rouge">foo_</code>的变量, 其取值函数是<code class="highlighter-rouge">foo()</code>. 还可能需要一个赋值函数<code class="highlighter-rouge">set_foo()</code>.</p>
 
-<p>特例是, 静态常量数据成员 (一般写做<code>kFoo</code>) 不需要是私有成员.</p>
+<p>特例是, 静态常量数据成员 (一般写做<code class="highlighter-rouge">kFoo</code>) 不需要是私有成员.</p>
 
 <p>一般在头文件中把存取函数定义成内联函数.</p>
 
-<p><strong>声明顺序</strong> 在类中使用特定的声明顺序:<code>public:</code>在<code>private:</code>之前, 成员函数在数据成员 (变量) 前。
+<p><strong>声明顺序</strong> 在类中使用特定的声明顺序:<code class="highlighter-rouge">public:</code>在<code class="highlighter-rouge">private:</code>之前, 成员函数在数据成员 (变量) 前。
 每个区段内的声明通常按以下顺序:</p>
 <ul>
   <li>typedefs 和枚举</li>
@@ -130,7 +130,7 @@
   <li>数据成员, 含静态数据成员</li>
 </ul>
 
-<p>友元声明应该放在 private 区段. 如果用宏<code>DISALLOW_COPY_AND_ASSIGN</code> 禁用拷贝和赋值, 应当将其置于 private 区段的末尾, 也即整个类声明的末尾. 参见可拷贝类型和可移动类型.</p>
+<p>友元声明应该放在 private 区段. 如果用宏<code class="highlighter-rouge">DISALLOW_COPY_AND_ASSIGN</code> 禁用拷贝和赋值, 应当将其置于 private 区段的末尾, 也即整个类声明的末尾. 参见可拷贝类型和可移动类型.</p>
 
 <p>不要在类定义中内联大型函数. 通常, 只有那些没有特别意义或性能要求高, 并且是比较短小的函数才能被定义为内联函数。</p>
 
@@ -154,7 +154,7 @@
 其二，可以在构造函数里用缺省参数，毕竟不可能取得它们的地址。
 其三，可以用来模拟变长数组。</p>
 
-<p><strong>变长数组和 alloca()</strong> 我们不允许使用变长数组和<code>alloca()</code>。改用更安全的分配器<code>（allocator）</code>，就像 <code>std::vector</code> 或 <code>std::unique_ptr&lt;T[]&gt;</code>。</p>
+<p><strong>变长数组和 alloca()</strong> 我们不允许使用变长数组和<code class="highlighter-rouge">alloca()</code>。改用更安全的分配器<code class="highlighter-rouge">（allocator）</code>，就像 <code class="highlighter-rouge">std::vector</code> 或 <code class="highlighter-rouge">std::unique_ptr&lt;T[]&gt;</code>。</p>
 
 <p><strong>友元</strong> 我们允许合理的使用友元类及友元函数。
 通常友元应该定义在同一文件内, 避免代码读者跑到其它文件查找使用该私有成员的类. 经常用到友元的一个地方是将 FooBuilder 声明为 Foo 的友元, 以便 FooBuilder 正确构造 Foo 的内部状态, 而无需将该状态暴露出来. 某些情况下, 将一个单元测试类声明成待测类的友元会很方便。</p>
@@ -168,27 +168,27 @@
 
 <p><strong>运行时类型识别</strong> 我们禁止使用 RTTI.在运行时判断类型通常意味着设计问题. 如果你需要在运行期间确定一个对象的类型, 这通常说明你需要考虑重新设计你的类.随意地使用 RTTI 会使你的代码难以维护. 它使得基于类型的判断树或者 switch 语句散布在代码各处. 如果以后要进行修改, 你就必须检查它们.RTTI 有合理的用途但是容易被滥用, 因此在使用时请务必注意. 在单元测试中可以使用 RTTI, 但是在其他代码中请尽量避免.</p>
 
-<p>替代方案： 使用虚函数、使用访问者设计模式和使用<code>dynamic_cast</code>。</p>
+<p>替代方案： 使用虚函数、使用访问者设计模式和使用<code class="highlighter-rouge">dynamic_cast</code>。</p>
 
-<p><strong>类型转换</strong> 使用 C++ 的类型转换, 如 <code>static_cast&lt;&gt;()</code>. 不要使用 <code>int y = (int)x</code> 或 <code>int y = int(x)</code> 等转换方式。
+<p><strong>类型转换</strong> 使用 C++ 的类型转换, 如 <code class="highlighter-rouge">static_cast&lt;&gt;()</code>. 不要使用 <code class="highlighter-rouge">int y = (int)x</code> 或 <code class="highlighter-rouge">int y = int(x)</code> 等转换方式。
 不要使用 C 风格类型转换. 而应该使用 C++ 风格。</p>
 <ul>
-  <li>用 <code>static_cast</code> 替代 C 风格的值转换, 或某个类指针需要明确的向上转换为父类指针时。</li>
-  <li>用 <code>const_cast</code> 去掉 <code>const</code> 限定符。</li>
-  <li>用 <code>reinterpret_cast</code> 指针类型和整型或其它指针之间进行不安全的相互转换. 仅在你对所做一切了然于心时使用.这个操作符能够在非相关的类型之间转换. 操作结果只是简单的从一个指针到别的指针的值的 二进制拷贝. 在类型之间指向的内容不做任何类型的检查和转换。</li>
-  <li><code>dynamic_cast</code>用于安全的向下转换，当不能进行安全转换时，对于指针则返回NULL, 对于引用类型则会抛出<code>bad cast exception</code>。</li>
+  <li>用 <code class="highlighter-rouge">static_cast</code> 替代 C 风格的值转换, 或某个类指针需要明确的向上转换为父类指针时。</li>
+  <li>用 <code class="highlighter-rouge">const_cast</code> 去掉 <code class="highlighter-rouge">const</code> 限定符。</li>
+  <li>用 <code class="highlighter-rouge">reinterpret_cast</code> 指针类型和整型或其它指针之间进行不安全的相互转换. 仅在你对所做一切了然于心时使用.这个操作符能够在非相关的类型之间转换. 操作结果只是简单的从一个指针到别的指针的值的 二进制拷贝. 在类型之间指向的内容不做任何类型的检查和转换。</li>
+  <li><code class="highlighter-rouge">dynamic_cast</code>用于安全的向下转换，当不能进行安全转换时，对于指针则返回NULL, 对于引用类型则会抛出<code class="highlighter-rouge">bad cast exception</code>。</li>
 </ul>
 
-<p><strong>流</strong> 只在记录日志时使用流。不要使用流, 除非是日志接口需要. 使用<code>printf</code>之类的代替。
+<p><strong>流</strong> 只在记录日志时使用流。不要使用流, 除非是日志接口需要. 使用<code class="highlighter-rouge">printf</code>之类的代替。
 使用流还有很多利弊, 但代码一致性胜过一切. 不要在代码中使用流.</p>
 
-<p><strong>前置自增和自减</strong> 对于迭代器和其他模板对象使用前缀形式<code>(++i)</code>的自增, 自减运算符.
+<p><strong>前置自增和自减</strong> 对于迭代器和其他模板对象使用前缀形式<code class="highlighter-rouge">(++i)</code>的自增, 自减运算符.
 不考虑返回值的话, 前置自增 (++i) 通常要比后置自增 (i++) 效率更高. 因为后置自增 (或自减) 需要对表达式的值 i 进行一次拷贝.</p>
 
-<p><strong>const 用法</strong> 我们强烈建议你在任何可能的情况下都要使用<code>const</code>. 此外有时改用<code>C++11</code>推出的 <code>constexpr</code>更好。
+<p><strong>const 用法</strong> 我们强烈建议你在任何可能的情况下都要使用<code class="highlighter-rouge">const</code>. 此外有时改用<code class="highlighter-rouge">C++11</code>推出的 <code class="highlighter-rouge">constexpr</code>更好。
 建议使用const的地方。</p>
 <ul>
-  <li>如果函数不会修改传你入的引用或指针类型参数, 该参数应声明为<code>const</code>.</li>
+  <li>如果函数不会修改传你入的引用或指针类型参数, 该参数应声明为<code class="highlighter-rouge">const</code>.</li>
   <li>尽可能将函数声明为 const. 访问函数应该总是 const. 其他不会修改任何数据成员, 未调用非 const 函数, 不会返回数据成员非 const 指针或引用的函数也应该声明成 const.</li>
   <li>如果数据成员在对象构造之后不再发生变化, 可将其定义为 const.</li>
   <li>尽可能将函数声明为 const. 访问函数应该总是 const. 其他不会修改任何数据成员, 未调用非 const 函数, 不会返回数据成员非 const 指针或引用的函数也应该声明成 const.</li>
@@ -199,11 +199,11 @@
 
 <p><strong>整型</strong> 使用断言来指出变量为非负数, 而不是使用无符号型!</p>
 
-<p>C++ 内建整型中, 仅使用 int. 如果程序中需要不同大小的变量, 可以使用 <code>&lt;stdint.h&gt;</code> 中长度精确的整型, 如 <code>int16_t</code>.如果您的变量可能不小于 <code>2^31 (2GiB)</code>, 就用 64 位变量比如 <code>int64_t</code>. 此外要留意，哪怕您的值并不会超出 int 所能够表示的范围，在计算过程中也可能会溢出。所以拿不准时，干脆用更大的类型。</p>
+<p>C++ 内建整型中, 仅使用 int. 如果程序中需要不同大小的变量, 可以使用 <code class="highlighter-rouge">&lt;stdint.h&gt;</code> 中长度精确的整型, 如 <code class="highlighter-rouge">int16_t</code>.如果您的变量可能不小于 <code class="highlighter-rouge">2^31 (2GiB)</code>, 就用 64 位变量比如 <code class="highlighter-rouge">int64_t</code>. 此外要留意，哪怕您的值并不会超出 int 所能够表示的范围，在计算过程中也可能会溢出。所以拿不准时，干脆用更大的类型。</p>
 
-<p>不要使用 <code>uint32_t</code> 等无符号整型, 除非你是在表示一个位组而不是一个数值, 或是你需要定义二进制补码溢出. 尤其是不要为了指出数值永不会为负, 而使用无符号类型. 相反, 你应该使用断言来保护数据.</p>
+<p>不要使用 <code class="highlighter-rouge">uint32_t</code> 等无符号整型, 除非你是在表示一个位组而不是一个数值, 或是你需要定义二进制补码溢出. 尤其是不要为了指出数值永不会为负, 而使用无符号类型. 相反, 你应该使用断言来保护数据.</p>
 
-<p><strong>64 位下的可移植性</strong> 你要非常小心的对待结构体对齐, 尤其是要持久化到磁盘上的结构体。在 64 位系统中, 任何含有 <code>int64_t/uint64_t</code> 成员的类/结构体, 缺省都以 8 字节在结尾对齐. 如果 32 位和 64 位代码要共用持久化的结构体, 需要确保两种体系结构下的结构体对齐一致. 大多数编译器都允许调整结构体对齐. gcc 中可使用 <code>__attribute__((packed))</code>。</p>
+<p><strong>64 位下的可移植性</strong> 你要非常小心的对待结构体对齐, 尤其是要持久化到磁盘上的结构体。在 64 位系统中, 任何含有 <code class="highlighter-rouge">int64_t/uint64_t</code> 成员的类/结构体, 缺省都以 8 字节在结尾对齐. 如果 32 位和 64 位代码要共用持久化的结构体, 需要确保两种体系结构下的结构体对齐一致. 大多数编译器都允许调整结构体对齐. gcc 中可使用 <code class="highlighter-rouge">__attribute__((packed))</code>。</p>
 
 <p><strong>预处理宏</strong> 使用宏时要非常谨慎, 尽量以内联函数, 枚举和常量代替之。
 下面给出的用法模式可以避免使用宏带来的问题; 如果你要宏, 尽可能遵守:</p>
@@ -217,7 +217,7 @@
 
 <p><strong>nullptr 和 NULL</strong> 对于指针 (地址值), 到底是用 0, NULL 还是 nullptr. C++11 项目用 nullptr; C++03 项目则用 NULL, 毕竟它看起来像指针。实际上，一些 C++ 编译器对 NULL 的定义比较特殊，可以输出有用的警告，特别是 sizeof(NULL) 就和 sizeof(0) 不一样。</p>
 
-<p><strong>sizeof</strong> 尽可能用 <code>sizeof(varname)</code> 代替 <code>sizeof(type)</code>。使用<code>sizeof(varname)</code> 是因为当代码中变量类型改变时会自动更新。</p>
+<p><strong>sizeof</strong> 尽可能用 <code class="highlighter-rouge">sizeof(varname)</code> 代替 <code class="highlighter-rouge">sizeof(type)</code>。使用<code class="highlighter-rouge">sizeof(varname)</code> 是因为当代码中变量类型改变时会自动更新。</p>
 
 <p><strong>auto</strong> 用 auto 绕过烦琐的类型名，只要可读性好就继续用，别用在局部变量之外的地方。</p>
 
@@ -233,30 +233,30 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 <p><strong>类型命名</strong> 类型名称的每个单词首字母均大写, 不包含下划线: MyExcitingClass, MyExcitingEnum.</p>
 
-<p><strong>变量命名</strong> 变量名一律小写, 单词之间用下划线连接. 类的成员变量以下划线结尾, 但结构体的就不用，如<code>::a_local_variable</code>, <code>a_struct_data_member</code>, <code>a_class_data_member_</code>.</p>
+<p><strong>变量命名</strong> 变量名一律小写, 单词之间用下划线连接. 类的成员变量以下划线结尾, 但结构体的就不用，如<code class="highlighter-rouge">::a_local_variable</code>, <code class="highlighter-rouge">a_struct_data_member</code>, <code class="highlighter-rouge">a_class_data_member_</code>.</p>
 <ul>
   <li>类数据成员：不管是静态的还是非静态的，类数据成员都可以和普通变量一样, 但要接下划线。</li>
   <li>结构体变量:不管是静态的还是非静态的，结构体数据成员都可以和普通变量一样, 不用像类那样接下划线。</li>
-  <li>对全局变量没有特别要求, 少用就好, 但如果你要用, 可以用 <code>g_</code> 或其它标志作为前缀, 以便更好的区分局部变量.</li>
+  <li>对全局变量没有特别要求, 少用就好, 但如果你要用, 可以用 <code class="highlighter-rouge">g_</code> 或其它标志作为前缀, 以便更好的区分局部变量.</li>
 </ul>
 
-<p><strong>常量命名</strong> 在全局或类里的常量名称前加 k: <code>kDaysInAWeek</code>. 且除去开头的 k 之外每个单词开头字母均大写。</p>
+<p><strong>常量命名</strong> 在全局或类里的常量名称前加 k: <code class="highlighter-rouge">kDaysInAWeek</code>. 且除去开头的 k 之外每个单词开头字母均大写。</p>
 
 <p><strong>函数命名</strong> 常规函数: 函数名的每个单词首字母大写, 没有下划线。
 取值和设值函数: 取值（Accessors）和设值（Mutators）函数要与存取的变量名匹配。</p>
 
-<p><strong>名字空间命名</strong> 名字空间用小写字母命名, 并基于项目名称和目录结构: <code>google_awesome_project</code>。</p>
+<p><strong>名字空间命名</strong> 名字空间用小写字母命名, 并基于项目名称和目录结构: <code class="highlighter-rouge">google_awesome_project</code>。</p>
 
-<p><strong>枚举命名</strong> 枚举的命名应当和 常量 或 宏 一致: <code>kEnumName</code> 或是 <code>ENUM_NAME</code>.</p>
+<p><strong>枚举命名</strong> 枚举的命名应当和 常量 或 宏 一致: <code class="highlighter-rouge">kEnumName</code> 或是 <code class="highlighter-rouge">ENUM_NAME</code>.</p>
 
-<p><strong>宏命名</strong> 像这样命名: <code>MY_MACRO_THAT_SCARES_SMALL_CHILDREN</code>。</p>
+<p><strong>宏命名</strong> 像这样命名: <code class="highlighter-rouge">MY_MACRO_THAT_SCARES_SMALL_CHILDREN</code>。</p>
 
 <p><strong>命名规则的特例</strong> 如果你命名的实体与已有 C/C++ 实体相似, 可参考现有命名策略.
-<code>bigopen()</code> 参照　<code>open()</code>, <code>uint</code> 使用　typedef, <code>LONGLONG_MAX</code> 参照常量<code>INT_MAX</code>。</p>
+<code class="highlighter-rouge">bigopen()</code> 参照　<code class="highlighter-rouge">open()</code>, <code class="highlighter-rouge">uint</code> 使用　typedef, <code class="highlighter-rouge">LONGLONG_MAX</code> 参照常量<code class="highlighter-rouge">INT_MAX</code>。</p>
 
 <h4 id="注释">注释</h4>
 
-<p><strong>注释风格</strong> 使用 <code>//</code> 或 <code>/* */</code>, 统一就好.</p>
+<p><strong>注释风格</strong> 使用 <code class="highlighter-rouge">//</code> 或 <code class="highlighter-rouge">/* */</code>, 统一就好.</p>
 
 <p><strong>文件注释</strong> 在每一个文件开头加入版权公告, 然后是文件内容描述.
 每个文件都应该包含以下项, 依次是:</p>
@@ -278,7 +278,7 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 <p><strong>TODO 注释</strong> 对那些临时的, 短期的解决方案, 或已经够好但仍不完美的代码使用 TODO 注释.</p>
 
-<p><strong>弃用注释</strong> 通过弃用注释（<code>DEPRECATED</code> comments）以标记某接口点（interface points）已弃用。</p>
+<p><strong>弃用注释</strong> 通过弃用注释（<code class="highlighter-rouge">DEPRECATED</code> comments）以标记某接口点（interface points）已弃用。</p>
 
 <h4 id="格式">格式</h4>
 
@@ -313,7 +313,7 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 <p><strong>循环和开关选择语句</strong> switch 语句可以使用大括号分段，以表明 cases 之间不是连在一起的。在单语句循环里，括号可用可不用。空循环体应使用 {} 或 continue.</p>
 
-<p>如果有不满足 case 条件的枚举值, switch 应该总是包含一个 default 匹配 (如果有输入值没有 case 去处理, 编译器将报警). 如果 default 应该永远执行不到, 简单的加条 <code>assert(false)</code></p>
+<p>如果有不满足 case 条件的枚举值, switch 应该总是包含一个 default 匹配 (如果有输入值没有 case 去处理, 编译器将报警). 如果 default 应该永远执行不到, 简单的加条 <code class="highlighter-rouge">assert(false)</code></p>
 
 <p>空循环体应使用 {} 或 continue, 而不是一个简单的分号.</p>
 
@@ -323,7 +323,7 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 <p><strong>函数返回值</strong> return 表达式里时没必要都用圆括号。</p>
 
-<p><strong>变量及数组初始化</strong> 用 =, () 和 {} 均可. 为了强制禁用 <code>std::initializer_list</code> 构造函数，请改用括号。</p>
+<p><strong>变量及数组初始化</strong> 用 =, () 和 {} 均可. 为了强制禁用 <code class="highlighter-rouge">std::initializer_list</code> 构造函数，请改用括号。</p>
 
 <p><strong>预处理指令</strong> 预处理指令不要缩进, 从行首开始.</p>
 

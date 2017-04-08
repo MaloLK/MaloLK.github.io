@@ -15,10 +15,10 @@
 &lt;ol&gt;
   &lt;li&gt;根据要创建的线程个数设置段锁的范围&lt;/li&gt;
   &lt;li&gt;设置线程结构体&lt;/li&gt;
-  &lt;li&gt;创建线程，线程函数为&lt;code&gt;worker_libevent&lt;/code&gt;，之后主线程调用&lt;code&gt;wait_for_thread_registration&lt;/code&gt;，然后睡眠在&lt;code&gt;init_lock&lt;/code&gt;上等待子线程注册完毕。同时子线程的步骤如下:
+  &lt;li&gt;创建线程，线程函数为&lt;code class=&quot;highlighter-rouge&quot;&gt;worker_libevent&lt;/code&gt;，之后主线程调用&lt;code class=&quot;highlighter-rouge&quot;&gt;wait_for_thread_registration&lt;/code&gt;，然后睡眠在&lt;code class=&quot;highlighter-rouge&quot;&gt;init_lock&lt;/code&gt;上等待子线程注册完毕。同时子线程的步骤如下:
     &lt;ul&gt;
-      &lt;li&gt;&lt;code&gt;worker_libevent&lt;/code&gt;中每一个thread中设置单独的logger，调用&lt;code&gt;register_thread_initialized()&lt;/code&gt;向主线程注册当前线程，然后进入当前线程的event_loop。&lt;/li&gt;
-      &lt;li&gt;&lt;code&gt;register_thread_initialized&lt;/code&gt;的主要工作为增加已经注册的线程个数&lt;code&gt;init_count&lt;/code&gt;，然后通知主线程。如果所有的worker线程已经启动完毕，则主线程会退出&lt;code&gt;wait_for_thread_registration&lt;/code&gt;。&lt;/li&gt;
+      &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;worker_libevent&lt;/code&gt;中每一个thread中设置单独的logger，调用&lt;code class=&quot;highlighter-rouge&quot;&gt;register_thread_initialized()&lt;/code&gt;向主线程注册当前线程，然后进入当前线程的event_loop。&lt;/li&gt;
+      &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;register_thread_initialized&lt;/code&gt;的主要工作为增加已经注册的线程个数&lt;code class=&quot;highlighter-rouge&quot;&gt;init_count&lt;/code&gt;，然后通知主线程。如果所有的worker线程已经启动完毕，则主线程会退出&lt;code class=&quot;highlighter-rouge&quot;&gt;wait_for_thread_registration&lt;/code&gt;。&lt;/li&gt;
     &lt;/ul&gt;
   &lt;/li&gt;
 &lt;/ol&gt;
@@ -27,27 +27,27 @@
 &lt;p&gt;源码中维持一个用于存储连接信息结构体的内存池(cqi_free_list)。内存池的管理方式是，主线程负责从内存池中获取结构体，如果没有空闲的结构体则每次分配预定数目的结构体，而worker线程则负责将结构体放回内存池。取出放回的操作都需要锁保护。&lt;/p&gt;
 
 &lt;ol&gt;
-  &lt;li&gt;首先从&lt;code&gt;CQ_ITEM&lt;/code&gt;内存池中分配一个新的item&lt;/li&gt;
+  &lt;li&gt;首先从&lt;code class=&quot;highlighter-rouge&quot;&gt;CQ_ITEM&lt;/code&gt;内存池中分配一个新的item&lt;/li&gt;
   &lt;li&gt;使用轮转法选择一个worker线程&lt;/li&gt;
   &lt;li&gt;设置item中的sfd等信息，将其压入到所选的线程的待处理连接队列中&lt;/li&gt;
-  &lt;li&gt;向worker线程中的pipe中写入字符&lt;code&gt;c&lt;/code&gt;代表有新的连接&lt;/li&gt;
-  &lt;li&gt;worker线程中的pipe对应的文件描述符的事件回调函数&lt;code&gt;thread_libevent_process&lt;/code&gt;将会被调用，在pipe中读取到的字符为&lt;code&gt;c&lt;/code&gt;的情况下，则表示有新的连接，从待处理连接中取出一个&lt;code&gt;cq_item&lt;/code&gt;，调用&lt;code&gt;conn_new&lt;/code&gt;根据&lt;code&gt;cq_item&lt;/code&gt;中的信息创建新的连接，接着将&lt;code&gt;cq_item&lt;/code&gt;是放到&lt;code&gt;CQ_ITEM&lt;/code&gt;内存池。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;conn_new&lt;/code&gt;会进行以下操作：&lt;strong&gt;使用连接的文件描述符索引conns指针数组&lt;/strong&gt;，由于连接的文件描述符是唯一的，因此这里访问全局的&lt;code&gt;conns&lt;/code&gt;没有加锁，如果conns中对应的指针为&lt;code&gt;NULL&lt;/code&gt;，则表示这个文件描述符从来都没有被使用过，因此为其分配&lt;code&gt;conn&lt;/code&gt;结构体，接着设置连接的缓冲等信息，另外从&lt;code&gt;dispatch_conn_new&lt;/code&gt;的调用可以看出所有的连接的默认事件是读事件，读事件会在此时注册到相应的&lt;code&gt;event_loop&lt;/code&gt;中。&lt;strong&gt;当连接释放时，conns中对应的连接结构体不会释放，而是被重复利用，只是连接结构体中的指针对应的内存会被释放或归还到相应的内存池&lt;/strong&gt;。&lt;/li&gt;
+  &lt;li&gt;向worker线程中的pipe中写入字符&lt;code class=&quot;highlighter-rouge&quot;&gt;c&lt;/code&gt;代表有新的连接&lt;/li&gt;
+  &lt;li&gt;worker线程中的pipe对应的文件描述符的事件回调函数&lt;code class=&quot;highlighter-rouge&quot;&gt;thread_libevent_process&lt;/code&gt;将会被调用，在pipe中读取到的字符为&lt;code class=&quot;highlighter-rouge&quot;&gt;c&lt;/code&gt;的情况下，则表示有新的连接，从待处理连接中取出一个&lt;code class=&quot;highlighter-rouge&quot;&gt;cq_item&lt;/code&gt;，调用&lt;code class=&quot;highlighter-rouge&quot;&gt;conn_new&lt;/code&gt;根据&lt;code class=&quot;highlighter-rouge&quot;&gt;cq_item&lt;/code&gt;中的信息创建新的连接，接着将&lt;code class=&quot;highlighter-rouge&quot;&gt;cq_item&lt;/code&gt;是放到&lt;code class=&quot;highlighter-rouge&quot;&gt;CQ_ITEM&lt;/code&gt;内存池。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;conn_new&lt;/code&gt;会进行以下操作：&lt;strong&gt;使用连接的文件描述符索引conns指针数组&lt;/strong&gt;，由于连接的文件描述符是唯一的，因此这里访问全局的&lt;code class=&quot;highlighter-rouge&quot;&gt;conns&lt;/code&gt;没有加锁，如果conns中对应的指针为&lt;code class=&quot;highlighter-rouge&quot;&gt;NULL&lt;/code&gt;，则表示这个文件描述符从来都没有被使用过，因此为其分配&lt;code class=&quot;highlighter-rouge&quot;&gt;conn&lt;/code&gt;结构体，接着设置连接的缓冲等信息，另外从&lt;code class=&quot;highlighter-rouge&quot;&gt;dispatch_conn_new&lt;/code&gt;的调用可以看出所有的连接的默认事件是读事件，读事件会在此时注册到相应的&lt;code class=&quot;highlighter-rouge&quot;&gt;event_loop&lt;/code&gt;中。&lt;strong&gt;当连接释放时，conns中对应的连接结构体不会释放，而是被重复利用，只是连接结构体中的指针对应的内存会被释放或归还到相应的内存池&lt;/strong&gt;。&lt;/li&gt;
 &lt;/ol&gt;
 
 &lt;h5 id=&quot;连接管理&quot;&gt;连接管理&lt;/h5&gt;
 
-&lt;h6 id=&quot;连接的事件处理event_handler&quot;&gt;连接的事件处理&lt;code&gt;event_handler&lt;/code&gt;&lt;/h6&gt;
-&lt;p&gt;这个函数会在&lt;code&gt;conn_new&lt;/code&gt;中作为连接的事件回调函数，这个函数其中一个重要的作用是调用&lt;code&gt;drive_machine&lt;/code&gt;，该函数根据当前的连接状态，使用不同的处理函数。在&lt;code&gt;dispatch_conn_new&lt;/code&gt;中可以看出所有连接的初始状态是&lt;code&gt;conn_new_cmd&lt;/code&gt;，也就是处于处理命令的状态，因此在连接中有数据到来时，会转到&lt;code&gt;drive_machine&lt;/code&gt;的&lt;code&gt;conn_new_cmd&lt;/code&gt;分支，如果此时的read_buffer还没有接收到完整的命令，则会将状态改变为&lt;code&gt;conn_waiting&lt;/code&gt;等待读取更多的数据。&lt;strong&gt;值得注意的是，为了防止单个连接一次处理太多的请求导致其他的连接“饿死”，源码中会对每个连接每次处理的requests个数进行限制。但是如果当前已经接受完所有的请求数据，那么除非有新的数据到来，底层的网络库将不会再通知应用层。为了解决这个问题，源码中使用了一个技巧，在处理完一定数量的请求后，为连接设置可写事件，这一般是可行的，然后在下次有可写事件时再判断是否有未处理完的请求。注意此时的连接状态仍然为conn_new_cmd，下次有可写事件时，仍然会转到这个分支&lt;/strong&gt;&lt;/p&gt;
+&lt;h6 id=&quot;连接的事件处理event_handler&quot;&gt;连接的事件处理&lt;code class=&quot;highlighter-rouge&quot;&gt;event_handler&lt;/code&gt;&lt;/h6&gt;
+&lt;p&gt;这个函数会在&lt;code class=&quot;highlighter-rouge&quot;&gt;conn_new&lt;/code&gt;中作为连接的事件回调函数，这个函数其中一个重要的作用是调用&lt;code class=&quot;highlighter-rouge&quot;&gt;drive_machine&lt;/code&gt;，该函数根据当前的连接状态，使用不同的处理函数。在&lt;code class=&quot;highlighter-rouge&quot;&gt;dispatch_conn_new&lt;/code&gt;中可以看出所有连接的初始状态是&lt;code class=&quot;highlighter-rouge&quot;&gt;conn_new_cmd&lt;/code&gt;，也就是处于处理命令的状态，因此在连接中有数据到来时，会转到&lt;code class=&quot;highlighter-rouge&quot;&gt;drive_machine&lt;/code&gt;的&lt;code class=&quot;highlighter-rouge&quot;&gt;conn_new_cmd&lt;/code&gt;分支，如果此时的read_buffer还没有接收到完整的命令，则会将状态改变为&lt;code class=&quot;highlighter-rouge&quot;&gt;conn_waiting&lt;/code&gt;等待读取更多的数据。&lt;strong&gt;值得注意的是，为了防止单个连接一次处理太多的请求导致其他的连接“饿死”，源码中会对每个连接每次处理的requests个数进行限制。但是如果当前已经接受完所有的请求数据，那么除非有新的数据到来，底层的网络库将不会再通知应用层。为了解决这个问题，源码中使用了一个技巧，在处理完一定数量的请求后，为连接设置可写事件，这一般是可行的，然后在下次有可写事件时再判断是否有未处理完的请求。注意此时的连接状态仍然为conn_new_cmd，下次有可写事件时，仍然会转到这个分支&lt;/strong&gt;&lt;/p&gt;
 
-&lt;h6 id=&quot;连接中的缓冲处理try_read_network&quot;&gt;连接中的缓冲处理&lt;code&gt;try_read_network&lt;/code&gt;&lt;/h6&gt;
+&lt;h6 id=&quot;连接中的缓冲处理try_read_network&quot;&gt;连接中的缓冲处理&lt;code class=&quot;highlighter-rouge&quot;&gt;try_read_network&lt;/code&gt;&lt;/h6&gt;
 &lt;p&gt;源码中使用的方式是每次尽可能的将连接中的数据读完（可能使用的epoll 的et模式）。但是需要&lt;strong&gt;防止连接缓存内存消耗过多&lt;/strong&gt;，源码中限制重新分配内存的次数，如果分配的次数超过预订限制则返回。另外在&lt;strong&gt;处理相邻两个请求之间会将连接的缓冲缩小的适当的大小&lt;/strong&gt;。&lt;/p&gt;
 
 &lt;h6 id=&quot;对同时在线的连接数进行限制&quot;&gt;对同时在线的连接数进行限制&lt;/h6&gt;
-&lt;p&gt;源码中在接收新的连接时，会检查当前的连接数，如果连接数超过限制，则会给客户端发送错误消息，并将连接关闭，而不再接受新的连接。&lt;strong&gt;那什么时候才能再次接受新的连接呢？源码中采用的方法是设定一个定时器(10ms)z不断的判断当前是否可以重新接受连接，判断的标准是是否有连接关闭（由&lt;code&gt;conn_close来触发&lt;/code&gt;）&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;源码中在接收新的连接时，会检查当前的连接数，如果连接数超过限制，则会给客户端发送错误消息，并将连接关闭，而不再接受新的连接。&lt;strong&gt;那什么时候才能再次接受新的连接呢？源码中采用的方法是设定一个定时器(10ms)z不断的判断当前是否可以重新接受连接，判断的标准是是否有连接关闭（由&lt;code class=&quot;highlighter-rouge&quot;&gt;conn_close来触发&lt;/code&gt;）&lt;/strong&gt;。&lt;/p&gt;
 
 &lt;h6 id=&quot;处理timeout连接&quot;&gt;处理timeout连接&lt;/h6&gt;
-&lt;p&gt;使用单独的一个线程检测连接数组conns中是否有连接已经过期，如果有则向其连接所属的线程发送通知消息，同时传送相应的socket描述符。worker线程会在&lt;code&gt;thread_libevent_process&lt;/code&gt;中收到通知并关闭闲置连接。&lt;/p&gt;
+&lt;p&gt;使用单独的一个线程检测连接数组conns中是否有连接已经过期，如果有则向其连接所属的线程发送通知消息，同时传送相应的socket描述符。worker线程会在&lt;code class=&quot;highlighter-rouge&quot;&gt;thread_libevent_process&lt;/code&gt;中收到通知并关闭闲置连接。&lt;/p&gt;
 
 &lt;h4 id=&quot;命令处理流程&quot;&gt;命令处理流程&lt;/h4&gt;
 &lt;h5 id=&quot;get命令&quot;&gt;Get命令&lt;/h5&gt;
@@ -81,45 +81,45 @@
 &lt;p&gt;实现flush_all的最直接的方式是一次将所有的items删除，但是这样花费的时间很长。memcached中使用延迟删除的方式，将当前执行flush_all命令的时间设置为oldest_live，在下次调用get等操作读取item时如果item最近一次访问的时间在oldest_live之前说明这个item已经被惰性删除了，因此不返回这个item而是将其删除。&lt;/p&gt;
 
 &lt;h5 id=&quot;从-lru-中分配一个-item&quot;&gt;从 LRU 中分配一个 item&lt;/h5&gt;
-&lt;p&gt;首先试着从cold_lru中回收过期的item, 然后从相应的slabclass中分配一个item，如果分配失败说明slabclass中已经没有空闲的item，在这种情况下再检查hot_lru和warm_lru中的item所占内存是否超过限制，如果超过限制则会将item移动到cold_lru，否则说明hot_lru和warm_lru中的item个数太少，如果item处于活跃状态则更新其在lru链表中的新鲜度。如果hot_lru和warm_lru中的item个数太少当前的item又不活跃则将其删除，这个过程不一定能够删除item，因此最后一次强制从cold_lru中删除item。如果经过上述的过程仍然不能够分配可用的item，系统则会认为是&lt;code&gt;Out of memory&lt;/code&gt;。
+&lt;p&gt;首先试着从cold_lru中回收过期的item, 然后从相应的slabclass中分配一个item，如果分配失败说明slabclass中已经没有空闲的item，在这种情况下再检查hot_lru和warm_lru中的item所占内存是否超过限制，如果超过限制则会将item移动到cold_lru，否则说明hot_lru和warm_lru中的item个数太少，如果item处于活跃状态则更新其在lru链表中的新鲜度。如果hot_lru和warm_lru中的item个数太少当前的item又不活跃则将其删除，这个过程不一定能够删除item，因此最后一次强制从cold_lru中删除item。如果经过上述的过程仍然不能够分配可用的item，系统则会认为是&lt;code class=&quot;highlighter-rouge&quot;&gt;Out of memory&lt;/code&gt;。
 接下值得注意的是，新分配的item所属的id（slabs_clsid, 这个名字起得比较混乱容易误解）不再仅仅是所属slabclass的id,而是所属lru的id。&lt;/p&gt;
 
 &lt;h5 id=&quot;item-在-lru-中的操作&quot;&gt;item 在 LRU 中的操作&lt;/h5&gt;
 &lt;ol&gt;
-  &lt;li&gt;&lt;code&gt;do_item_update&lt;/code&gt;: 在更新item的访问时间和在lru中的位置时会首先检查当前时间距离item的最近访问时间是否已经超过了预定的期限，如果是则更新。这样做的目的是防止频繁的更新操作耗费太多的时间，过多的get命令将会导致过多的更新操作，如果每次都更新（即使间隔时间很短），将会导致get请求变慢。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;do_item_get&lt;/code&gt;（使用延迟删除的策略）: 首先在hashtable中查找这个item，如果找到则检查这个item是否已经被flush命令给“惰性删除了”，如果是则将其从hashtable和lru链表中删除，结束返回。如果没有被flushed掉则检查其是否已经过期，如果过期则将其从hashtable和lru链表中删除，结束返回。否则，将item置为&lt;code&gt;ITEM_FETECHED｜ITEM_ACTIVE&lt;/code&gt;状态。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;do_item_touch&lt;/code&gt;：这个操作调用上面的get操作，然后只是修改其过期时间。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;do_item_update&lt;/code&gt;: 在更新item的访问时间和在lru中的位置时会首先检查当前时间距离item的最近访问时间是否已经超过了预定的期限，如果是则更新。这样做的目的是防止频繁的更新操作耗费太多的时间，过多的get命令将会导致过多的更新操作，如果每次都更新（即使间隔时间很短），将会导致get请求变慢。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;do_item_get&lt;/code&gt;（使用延迟删除的策略）: 首先在hashtable中查找这个item，如果找到则检查这个item是否已经被flush命令给“惰性删除了”，如果是则将其从hashtable和lru链表中删除，结束返回。如果没有被flushed掉则检查其是否已经过期，如果过期则将其从hashtable和lru链表中删除，结束返回。否则，将item置为&lt;code class=&quot;highlighter-rouge&quot;&gt;ITEM_FETECHED｜ITEM_ACTIVE&lt;/code&gt;状态。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;do_item_touch&lt;/code&gt;：这个操作调用上面的get操作，然后只是修改其过期时间。&lt;/li&gt;
 &lt;/ol&gt;
 
 &lt;h5 id=&quot;维护-lru-的线程&quot;&gt;维护 LRU 的线程&lt;/h5&gt;
 &lt;ol&gt;
-  &lt;li&gt;&lt;code&gt;lru_maintainer_junngle&lt;/code&gt;:　每调用一次则会检查当前的slabclass中所含的空闲的items是否太多，如果所有的空闲的items组成的内存超过2.5个page则认为空闲item太多，则将其中的一个slab转移到&lt;code&gt;global-page-pool&lt;/code&gt;中。另外循环1000次，每次检查hot_lru和warm_lru中的item是否太多，如果太多则将其转移到cold_lru,如果cold_lru中的items太多，则将其删除归还给slab-class。这个函数的作用是不断的监测hot_lru和warm_lru的大小，如果过大则将多余的item转移到cold-lru中，检测cold-lru中的item是否处于活跃状态，如果处于活跃状态则将其转移到warm_lru中，否则将其删除。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;lru_maintainer_thread&lt;/code&gt;: 主要的工作分为两个部分，第一部分为调用&lt;code&gt;lru_maintainer_junngle&lt;/code&gt;控制lru中的item个数；另外一个作用调用&lt;code&gt;lru_maintainer_crawler_check&lt;/code&gt;检查每个slab-class中的lru是否需要进行爬虫操作，如果是则将需要进行爬虫的slab-class的id等信息传递给&lt;code&gt;lru_crawler_start&lt;/code&gt;用来启动爬虫功能。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;lru_crawler_start&lt;/code&gt;：为需要进行爬虫操作的slab-class的每个lru链表后插入用于爬虫的item,　这个爬虫item的主要目的是记录当前在lru链表中的位置，并检查item是否已经过期或者已经被flushed，如果是则将其删除，这就是所谓的惰性删除。函数的最后是唤醒用于爬虫的线程&lt;code&gt;item_crawler_thread&lt;/code&gt;。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;item_crawler_thread&lt;/code&gt;: 对所有需要进行爬虫的lru依次进行爬虫，每次检查当前lru中的一个item，接着检查下一个lru。但是为了防止爬虫时间过长影响正常的处理，每处理一个item，则将相关的锁释放，源码中会每处理&lt;code&gt;crawls_persleep&lt;/code&gt;个item就进入睡眠。当所有的lru都处理完毕，则爬虫线程将会进入睡眠，等待&lt;code&gt;lru_maintainer_thread&lt;/code&gt;线程将其唤醒。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;lru_maintainer_junngle&lt;/code&gt;:　每调用一次则会检查当前的slabclass中所含的空闲的items是否太多，如果所有的空闲的items组成的内存超过2.5个page则认为空闲item太多，则将其中的一个slab转移到&lt;code class=&quot;highlighter-rouge&quot;&gt;global-page-pool&lt;/code&gt;中。另外循环1000次，每次检查hot_lru和warm_lru中的item是否太多，如果太多则将其转移到cold_lru,如果cold_lru中的items太多，则将其删除归还给slab-class。这个函数的作用是不断的监测hot_lru和warm_lru的大小，如果过大则将多余的item转移到cold-lru中，检测cold-lru中的item是否处于活跃状态，如果处于活跃状态则将其转移到warm_lru中，否则将其删除。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;lru_maintainer_thread&lt;/code&gt;: 主要的工作分为两个部分，第一部分为调用&lt;code class=&quot;highlighter-rouge&quot;&gt;lru_maintainer_junngle&lt;/code&gt;控制lru中的item个数；另外一个作用调用&lt;code class=&quot;highlighter-rouge&quot;&gt;lru_maintainer_crawler_check&lt;/code&gt;检查每个slab-class中的lru是否需要进行爬虫操作，如果是则将需要进行爬虫的slab-class的id等信息传递给&lt;code class=&quot;highlighter-rouge&quot;&gt;lru_crawler_start&lt;/code&gt;用来启动爬虫功能。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;lru_crawler_start&lt;/code&gt;：为需要进行爬虫操作的slab-class的每个lru链表后插入用于爬虫的item,　这个爬虫item的主要目的是记录当前在lru链表中的位置，并检查item是否已经过期或者已经被flushed，如果是则将其删除，这就是所谓的惰性删除。函数的最后是唤醒用于爬虫的线程&lt;code class=&quot;highlighter-rouge&quot;&gt;item_crawler_thread&lt;/code&gt;。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;item_crawler_thread&lt;/code&gt;: 对所有需要进行爬虫的lru依次进行爬虫，每次检查当前lru中的一个item，接着检查下一个lru。但是为了防止爬虫时间过长影响正常的处理，每处理一个item，则将相关的锁释放，源码中会每处理&lt;code class=&quot;highlighter-rouge&quot;&gt;crawls_persleep&lt;/code&gt;个item就进入睡眠。当所有的lru都处理完毕，则爬虫线程将会进入睡眠，等待&lt;code class=&quot;highlighter-rouge&quot;&gt;lru_maintainer_thread&lt;/code&gt;线程将其唤醒。&lt;/li&gt;
 &lt;/ol&gt;
 
 &lt;h4 id=&quot;hashtable&quot;&gt;Hashtable&lt;/h4&gt;
 &lt;p&gt;hash表由一个指针数组构成，其中数组中的每个指针元素是一个链表。数组的大小是2的幂次，在初始化时需要指定数组的幂次。通过幂次分配指针数组。&lt;/p&gt;
 
 &lt;h5 id=&quot;hashtable-的扩展&quot;&gt;hashtable 的扩展&lt;/h5&gt;
-&lt;p&gt;memchached中要求hashtable中的元素的个数不能超过数组的大小的1.5倍，如果超过则需要扩展。扩展的任务由一个单独的线程来完成（&lt;code&gt;assoc_maintenance_thread&lt;/code&gt;）。这个线程主要的工作流程如下：&lt;/p&gt;
+&lt;p&gt;memchached中要求hashtable中的元素的个数不能超过数组的大小的1.5倍，如果超过则需要扩展。扩展的任务由一个单独的线程来完成（&lt;code class=&quot;highlighter-rouge&quot;&gt;assoc_maintenance_thread&lt;/code&gt;）。这个线程主要的工作流程如下：&lt;/p&gt;
 &lt;ol&gt;
-  &lt;li&gt;在初始阶段不需要扩展hashtable，此时该线程将会睡眠在条件变量&lt;code&gt;maintenance_cond&lt;/code&gt;上。&lt;/li&gt;
-  &lt;li&gt;当其他的worker线程在不断的向hashtable插入元素时，元素个数超过hashtable的大小的1.5倍，此时会调用&lt;code&gt;assoc_start_expand&lt;/code&gt;将&lt;code&gt;assoc_maintenance_thread&lt;/code&gt;唤醒&lt;/li&gt;
-  &lt;li&gt;此时hashtable维护线程会将所有的其他线程给阻塞，然后调用&lt;code&gt;assoc_expand&lt;/code&gt;将当前的&lt;code&gt;primary_hashtable&lt;/code&gt;赋给&lt;code&gt;old_hashtable&lt;/code&gt;，并为&lt;code&gt;primary_hashtable&lt;/code&gt;设置新的指针数组。接着解除其他线程的阻塞。&lt;/li&gt;
+  &lt;li&gt;在初始阶段不需要扩展hashtable，此时该线程将会睡眠在条件变量&lt;code class=&quot;highlighter-rouge&quot;&gt;maintenance_cond&lt;/code&gt;上。&lt;/li&gt;
+  &lt;li&gt;当其他的worker线程在不断的向hashtable插入元素时，元素个数超过hashtable的大小的1.5倍，此时会调用&lt;code class=&quot;highlighter-rouge&quot;&gt;assoc_start_expand&lt;/code&gt;将&lt;code class=&quot;highlighter-rouge&quot;&gt;assoc_maintenance_thread&lt;/code&gt;唤醒&lt;/li&gt;
+  &lt;li&gt;此时hashtable维护线程会将所有的其他线程给阻塞，然后调用&lt;code class=&quot;highlighter-rouge&quot;&gt;assoc_expand&lt;/code&gt;将当前的&lt;code class=&quot;highlighter-rouge&quot;&gt;primary_hashtable&lt;/code&gt;赋给&lt;code class=&quot;highlighter-rouge&quot;&gt;old_hashtable&lt;/code&gt;，并为&lt;code class=&quot;highlighter-rouge&quot;&gt;primary_hashtable&lt;/code&gt;设置新的指针数组。接着解除其他线程的阻塞。&lt;/li&gt;
   &lt;li&gt;&lt;strong&gt;扩展过程每次只会转移少数几个桶，这样做也是为了防止迁移时间过长&lt;/strong&gt;。&lt;/li&gt;
   &lt;li&gt;当迁移完毕时，hashtable维护线程则会重新进入睡眠状态。&lt;/li&gt;
 &lt;/ol&gt;
 
 &lt;h5 id=&quot;hashtable-迁移过程中的查找插入和删除&quot;&gt;Hashtable 迁移过程中的查找，插入和删除&lt;/h5&gt;
 &lt;ul&gt;
-  &lt;li&gt;插入操作：首先检查是否正在扩展hashtable，且所找key对应的bucket仍然在&lt;code&gt;old_hashtable&lt;/code&gt;中，如果是则将其插入到&lt;code&gt;old_hashtable&lt;/code&gt;中。&lt;strong&gt;优先插入到&lt;code&gt;old_hashtable&lt;/code&gt;中的原因是利于查找&lt;/strong&gt;，如果优先插入到&lt;code&gt;primary_hashtable&lt;/code&gt;中，则需要检查两个hashtable。&lt;/li&gt;
-  &lt;li&gt;查找和删除：也是先检查是否正在扩展hashtable，如果是则查看是否在&lt;code&gt;old_hashtable&lt;/code&gt;中，否则再查看&lt;code&gt;primary_hashtable&lt;/code&gt;。&lt;/li&gt;
+  &lt;li&gt;插入操作：首先检查是否正在扩展hashtable，且所找key对应的bucket仍然在&lt;code class=&quot;highlighter-rouge&quot;&gt;old_hashtable&lt;/code&gt;中，如果是则将其插入到&lt;code class=&quot;highlighter-rouge&quot;&gt;old_hashtable&lt;/code&gt;中。&lt;strong&gt;优先插入到&lt;code class=&quot;highlighter-rouge&quot;&gt;old_hashtable&lt;/code&gt;中的原因是利于查找&lt;/strong&gt;，如果优先插入到&lt;code class=&quot;highlighter-rouge&quot;&gt;primary_hashtable&lt;/code&gt;中，则需要检查两个hashtable。&lt;/li&gt;
+  &lt;li&gt;查找和删除：也是先检查是否正在扩展hashtable，如果是则查看是否在&lt;code class=&quot;highlighter-rouge&quot;&gt;old_hashtable&lt;/code&gt;中，否则再查看&lt;code class=&quot;highlighter-rouge&quot;&gt;primary_hashtable&lt;/code&gt;。&lt;/li&gt;
 &lt;/ul&gt;
 
 &lt;h5 id=&quot;hashtable-中的锁机制&quot;&gt;Hashtable 中的锁机制&lt;/h5&gt;
-&lt;p&gt;由上述可以知道，当hashtable开始进行扩展时，它会将所有其他会操作hashtable的线程暂停，此时将不会有不安全的操作发生。当将&lt;code&gt;primary_hashtable&lt;/code&gt;和&lt;code&gt;old_hashtable&lt;/code&gt;切换完毕后，对hashtable的访问将会自动判别item在哪个hashtable中。值得说的是，对hashtable的并发访问使用的是段锁，所谓段锁就是hashtable中的多个bucket的并发访问由一个锁访问。这里需要注意的是在进行迁移过程中，迁移线程转移一个bucket时是使用的是这个bucket的序号作为hash_value来获得段锁：&lt;code&gt;item_lock = item_trylock(expand_bucket)&lt;/code&gt;。由于有可能当前的bucket中有其他的worker线程正在访问里面的item，所以需要迁移bucket时需要加锁，但是这里用的是桶的序号(expand_bucket)来获得锁，那么这个锁和使用桶内的item获得的锁是同一个锁吗？答案是：是的。原因是这样的：在item_get函数中使用的是item中key的hash值来获得锁，在源码中的设计是这样的，桶的个数是N个，段锁的个数是M个，且保证M小于N，由于item选择桶是根据取其hash值低N位，即&lt;code&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; N - 1)&lt;/code&gt;，因此当使用bucket序号获取锁时相当于是&lt;code&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; N - 1) &amp;amp; (1 &amp;lt;&amp;lt; M - 1)&lt;/code&gt;，由于N &amp;gt; M,因此可以简化为&lt;code&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; M - 1)&lt;/code&gt;,　跟使用item_get获取锁的方式是一样的，所以如果在迁移过程中，使用bucket序号获得对应的锁后，该bucket中的item将因暂时无法获得锁而阻塞，从而保证hashtable扩展的线程安全。&lt;/p&gt;
+&lt;p&gt;由上述可以知道，当hashtable开始进行扩展时，它会将所有其他会操作hashtable的线程暂停，此时将不会有不安全的操作发生。当将&lt;code class=&quot;highlighter-rouge&quot;&gt;primary_hashtable&lt;/code&gt;和&lt;code class=&quot;highlighter-rouge&quot;&gt;old_hashtable&lt;/code&gt;切换完毕后，对hashtable的访问将会自动判别item在哪个hashtable中。值得说的是，对hashtable的并发访问使用的是段锁，所谓段锁就是hashtable中的多个bucket的并发访问由一个锁访问。这里需要注意的是在进行迁移过程中，迁移线程转移一个bucket时是使用的是这个bucket的序号作为hash_value来获得段锁：&lt;code class=&quot;highlighter-rouge&quot;&gt;item_lock = item_trylock(expand_bucket)&lt;/code&gt;。由于有可能当前的bucket中有其他的worker线程正在访问里面的item，所以需要迁移bucket时需要加锁，但是这里用的是桶的序号(expand_bucket)来获得锁，那么这个锁和使用桶内的item获得的锁是同一个锁吗？答案是：是的。原因是这样的：在item_get函数中使用的是item中key的hash值来获得锁，在源码中的设计是这样的，桶的个数是N个，段锁的个数是M个，且保证M小于N，由于item选择桶是根据取其hash值低N位，即&lt;code class=&quot;highlighter-rouge&quot;&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; N - 1)&lt;/code&gt;，因此当使用bucket序号获取锁时相当于是&lt;code class=&quot;highlighter-rouge&quot;&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; N - 1) &amp;amp; (1 &amp;lt;&amp;lt; M - 1)&lt;/code&gt;，由于N &amp;gt; M,因此可以简化为&lt;code class=&quot;highlighter-rouge&quot;&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; M - 1)&lt;/code&gt;,　跟使用item_get获取锁的方式是一样的，所以如果在迁移过程中，使用bucket序号获得对应的锁后，该bucket中的item将因暂时无法获得锁而阻塞，从而保证hashtable扩展的线程安全。&lt;/p&gt;
 </description>
         <pubDate>Fri, 13 Jan 2017 00:42:00 +0800</pubDate>
         <link>http://localhost:4000//2017/01/13/Memcached%E4%B8%AD%E7%9A%84LRU%E5%92%8CHashtable.html</link>
@@ -129,7 +129,7 @@
       <item>
         <title>Memcached中的slabs和CAS(Compare-And-Set)</title>
         <description>&lt;h4 id=&quot;slabs-的结构&quot;&gt;slabs 的结构&lt;/h4&gt;
-&lt;p&gt;memcached中将slab分为多类，分类的标准是slab中的基本块item的大小，相邻的slabclass中的item大小关系有一个固定的系数(1.25)决定。这些slab类以一个数组进行存储，其中每个元素是一个&lt;code&gt;slabclass_t&lt;/code&gt;指针。每个slabclass中含有多个相同类型的slab, 每个slab实际上是一个page(大小为1M)，然后这个page按照item的大小被分为多个item，这些空闲的item由slots链表进行管理。&lt;/p&gt;
+&lt;p&gt;memcached中将slab分为多类，分类的标准是slab中的基本块item的大小，相邻的slabclass中的item大小关系有一个固定的系数(1.25)决定。这些slab类以一个数组进行存储，其中每个元素是一个&lt;code class=&quot;highlighter-rouge&quot;&gt;slabclass_t&lt;/code&gt;指针。每个slabclass中含有多个相同类型的slab, 每个slab实际上是一个page(大小为1M)，然后这个page按照item的大小被分为多个item，这些空闲的item由slots链表进行管理。&lt;/p&gt;
 
 &lt;h4 id=&quot;slabs-的初始化过程&quot;&gt;slabs 的初始化过程&lt;/h4&gt;
 &lt;ol&gt;
@@ -153,7 +153,7 @@
 
 &lt;h4 id=&quot;将-item-归还给-slabclass&quot;&gt;将 item 归还给 slabclass&lt;/h4&gt;
 &lt;ol&gt;
-  &lt;li&gt;将item的flag设置为&lt;code&gt;ITEM_SLABBED&lt;/code&gt;，表示其没有被取走&lt;/li&gt;
+  &lt;li&gt;将item的flag设置为&lt;code class=&quot;highlighter-rouge&quot;&gt;ITEM_SLABBED&lt;/code&gt;，表示其没有被取走&lt;/li&gt;
   &lt;li&gt;将item中所属的class设置为０&lt;/li&gt;
   &lt;li&gt;将item加入到空闲item链表slots中&lt;/li&gt;
 &lt;/ol&gt;
@@ -161,22 +161,23 @@
 &lt;h4 id=&quot;slab-的-rebalance-过程&quot;&gt;slab 的 rebalance 过程&lt;/h4&gt;
 &lt;p&gt;在实际应用过程中，有的slab-class 使用的比其他的slab-class多，使用的较少的slab-class所占用的内存将会浪费内存，即使有爬虫线程在不断的删除过期的item，但是这些回收的item是否归还给当前的slab-class，所以需要额外的平衡线程将用的少的slab-class的内存页传送到用的比较多的slab-class中。&lt;/p&gt;
 &lt;ol&gt;
-  &lt;li&gt;&lt;code&gt;slab_rebalance_start&lt;/code&gt;: 这个函数的功能主要的作用是选取需要转出内存页的slab-class的内存页，源码中选取的是slab-class中的第一个内存页，因为第一个内存页中的items最先分配出去，其中的items存在的时间一般较大。确定这个内存页的起始位置和终止位置。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;slab_rebalance_alloc&lt;/code&gt;: 这个函数的主要作用是从指定的slab-class中分配一个item，如果这个item处于被转移的内存页中，则将其引用置为0,　接着分配下一个item。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;slabs_reassign&lt;/code&gt;: 这个函数的作用是设置需要进行内存页转移的源和目的slab-class，并唤醒rebalance线程进行内存页转移操作。这个函数主要由LRU维护线程在调用&lt;code&gt;lru_maintainer_junngle&lt;/code&gt;时调用，当然前提是开启auto_move功能。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;slab_rebalance_thread&lt;/code&gt;: 这是rebalance线程，首先调用&lt;code&gt;slab_rebalance_start&lt;/code&gt;确定要转移的源slab-class中的slab。然后调用&lt;code&gt;slab_rebalance_move&lt;/code&gt;将要转移的slab中的item全部回收。最后如果回收完毕，则会调用&lt;code&gt;slab_rebalance_finish&lt;/code&gt;将slab从源slab-class转移到目的slab-class中。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;slab_rebalance_start&lt;/code&gt;: 这个函数的功能主要的作用是选取需要转出内存页的slab-class的内存页，源码中选取的是slab-class中的第一个内存页，因为第一个内存页中的items最先分配出去，其中的items存在的时间一般较大。确定这个内存页的起始位置和终止位置。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;slab_rebalance_alloc&lt;/code&gt;: 这个函数的主要作用是从指定的slab-class中分配一个item，如果这个item处于被转移的内存页中，则将其引用置为0,　接着分配下一个item。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;slabs_reassign&lt;/code&gt;: 这个函数的作用是设置需要进行内存页转移的源和目的slab-class，并唤醒rebalance线程进行内存页转移操作。这个函数主要由LRU维护线程在调用&lt;code class=&quot;highlighter-rouge&quot;&gt;lru_maintainer_junngle&lt;/code&gt;时调用，当然前提是开启auto_move功能。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;slab_rebalance_thread&lt;/code&gt;: 这是rebalance线程，首先调用&lt;code class=&quot;highlighter-rouge&quot;&gt;slab_rebalance_start&lt;/code&gt;确定要转移的源slab-class中的slab。然后调用&lt;code class=&quot;highlighter-rouge&quot;&gt;slab_rebalance_move&lt;/code&gt;将要转移的slab中的item全部回收。最后如果回收完毕，则会调用&lt;code class=&quot;highlighter-rouge&quot;&gt;slab_rebalance_finish&lt;/code&gt;将slab从源slab-class转移到目的slab-class中。&lt;/li&gt;
 &lt;/ol&gt;
 
 &lt;h4 id=&quot;item-中的-cascompare-and-set的作用&quot;&gt;item 中的 CAS（Compare-And-Set）的作用&lt;/h4&gt;
 &lt;p&gt;CAS(Compare-And-Set)通常在以下情况使用：多个并发请求以原子的方式更新memcahced中的某个key。
 假设现在有两个并发请求A和B，两个请求都希望去增加memcache中的counter，可能的更新顺序如下：&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;A: counter = memcache.get(key) # Reads 42
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;A: counter = memcache.get(key) # Reads 42
 B: counter = memcache.get(key) # Reads 42
 A: memcache.set(key, counter+1) # Writes 43
 B: memcache.set(key, counter+1) # Writes 43
 &lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
 &lt;p&gt;如上所示，并没有将counter增加2。另外使用每次修改后再读取检查是否修改的方法也不可行，使用额外的锁也可能因为网络原因导致死锁。使用CAS可以解决这个问题：&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;client = memcache.Client();
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;client = memcache.Client();
 while (true) {
   counter = client.gets(key);
   if (client.cas(key, counter+1)) {
@@ -184,6 +185,7 @@ while (true) {
   }
 }
 &lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
 &lt;p&gt;每次client更新数据时，首先使用gets获得相应的key, key里包含当前value的一个版本（或者是timestamp），每次key对应的value被更新，key中的版本则会更新。因此当client更新value时需要提交上次读取的key，如果memchach检测到提供的key和server中的key不相同时，说明期间value已经被其他客户端更新，此时则会返回false，不做任何更新。客户端接收到false结果后则会继续尝试，当然实际实现中需要限制尝试的次数，因为有可能系统接受的请求太多，导致某些客户的请求一直无法满足。回到上面A和B两个并发请求的执行顺序，如果使用cas，那么第一次只有请求A会执行成功，而请求B的cas操作将会返回false，请求B再尝试一次则会成功。当然要达到上述的效果，必须要求在memcache中针对某个key的cas是串行操作，而不是并行操作。
 Ref: http://neopythonic.blogspot.com/2011/08/compare-and-set-in-memcache.html&lt;/p&gt;
 </description>
@@ -197,7 +199,7 @@ Ref: http://neopythonic.blogspot.com/2011/08/compare-and-set-in-memcache.html&lt
         <description>&lt;h4 id=&quot;memcachd守护进程的实现&quot;&gt;memcachd守护进程的实现&lt;/h4&gt;
 &lt;p&gt;为了摆脱控制终端对进程的影响，一般都是将进程变为守护进程。&lt;/p&gt;
 
-&lt;p&gt;使用fork产生子进程，父进程使用_exit()退出，使用_exit()而不是exit是因为exit会进行额外的操作，比如反向执行使用&lt;code&gt;atexit&lt;/code&gt;注册的函数，在linux中还会对标准输出和文件流进行flush操作。此时&lt;strong&gt;父进程先于子进程结束&lt;/strong&gt;, 子进程将会变为孤儿进程，孤儿进程一般会将init进程作为父进程，与僵尸进程的区别是，&lt;strong&gt;子进程先于父进程结束&lt;/strong&gt;，当子进程已经结束后，父进程没有使用wait等函数来获取终止子进程的信息以及清理子进程占用的资源（如回收进程列表信息）。&lt;/p&gt;
+&lt;p&gt;使用fork产生子进程，父进程使用_exit()退出，使用_exit()而不是exit是因为exit会进行额外的操作，比如反向执行使用&lt;code class=&quot;highlighter-rouge&quot;&gt;atexit&lt;/code&gt;注册的函数，在linux中还会对标准输出和文件流进行flush操作。此时&lt;strong&gt;父进程先于子进程结束&lt;/strong&gt;, 子进程将会变为孤儿进程，孤儿进程一般会将init进程作为父进程，与僵尸进程的区别是，&lt;strong&gt;子进程先于父进程结束&lt;/strong&gt;，当子进程已经结束后，父进程没有使用wait等函数来获取终止子进程的信息以及清理子进程占用的资源（如回收进程列表信息）。&lt;/p&gt;
 
 &lt;p&gt;接下来在子进程中调用setsid使得子进程在新的会话(session)中运行。这里需要回顾一下进程组和会话的概念。&lt;/p&gt;
 &lt;blockquote&gt;
@@ -281,9 +283,10 @@ int daemonize(int nochdir, int noclose)
 
 &lt;h4 id=&quot;从linux-shell-中启动守护进程&quot;&gt;从Linux shell 中启动守护进程&lt;/h4&gt;
 &lt;p&gt;在实际使用中，如何在linux中最快速的将某个进程设置为守护进程？
-使用&lt;code&gt;nohup&lt;/code&gt;命令可以帮助我们将进程变为守护进程。如下：&lt;/p&gt;
-&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;nohup your-porcess &amp;amp;
+使用&lt;code class=&quot;highlighter-rouge&quot;&gt;nohup&lt;/code&gt;命令可以帮助我们将进程变为守护进程。如下：&lt;/p&gt;
+&lt;div class=&quot;language-sh highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;nohup your-porcess &amp;amp;
 &lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
 &lt;p&gt;当一个会话结束时，会向会话中的每个进程发送SIGHUP信号，这个信号会使得进程退出。因此这里使用nohup的意图就是阻止当前进程接收SIGHUP信号，另一个作用是关闭标准输入，即使这个进程运行在前台也接收不到输入，而标准输出和标准错误都将会被重定向到nohup.out中，这里可以自定义标准输出和标准错误的重定向。加上’&amp;amp;’的作用则是将其变为后台进程。&lt;/p&gt;
 
 &lt;h4 id=&quot;参考&quot;&gt;参考&lt;/h4&gt;
@@ -301,19 +304,19 @@ int daemonize(int nochdir, int noclose)
 
 &lt;p&gt;主要有两个作用&lt;a href=&quot;http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t&quot;&gt;戳这&lt;/a&gt;：&lt;/p&gt;
 &lt;ol&gt;
-  &lt;li&gt;对&lt;code&gt;wildcard&lt;/code&gt;地址有影响，假如当前的&lt;code&gt;server&lt;/code&gt;绑定的地址是0.0.0.0:21, 如果这个选项没有设置，那么此时同一台主机的另一个&lt;code&gt;server&lt;/code&gt;绑定到特定地址相同端口，比如 192.168.0.1:21，就会发生错误EADDRINUSE。如果选项有设置，则不会出现这个错误。&lt;/li&gt;
-  &lt;li&gt;另外一个作用比较常见，在程序调试或者重新载入新的设置时一般需要立即重启&lt;code&gt;server&lt;/code&gt;，但是之前被关闭的server可能正处于&lt;code&gt;TIME_WAIT&lt;/code&gt;状态，此时如果没有设置这个选项，则会导致EADDRINUSE，因为处于&lt;code&gt;TIME_WAIT&lt;/code&gt;的server仍旧绑定在相同的地址和端口上。因此实际使用时会设置这个选项利于调试。&lt;/li&gt;
+  &lt;li&gt;对&lt;code class=&quot;highlighter-rouge&quot;&gt;wildcard&lt;/code&gt;地址有影响，假如当前的&lt;code class=&quot;highlighter-rouge&quot;&gt;server&lt;/code&gt;绑定的地址是0.0.0.0:21, 如果这个选项没有设置，那么此时同一台主机的另一个&lt;code class=&quot;highlighter-rouge&quot;&gt;server&lt;/code&gt;绑定到特定地址相同端口，比如 192.168.0.1:21，就会发生错误EADDRINUSE。如果选项有设置，则不会出现这个错误。&lt;/li&gt;
+  &lt;li&gt;另外一个作用比较常见，在程序调试或者重新载入新的设置时一般需要立即重启&lt;code class=&quot;highlighter-rouge&quot;&gt;server&lt;/code&gt;，但是之前被关闭的server可能正处于&lt;code class=&quot;highlighter-rouge&quot;&gt;TIME_WAIT&lt;/code&gt;状态，此时如果没有设置这个选项，则会导致EADDRINUSE，因为处于&lt;code class=&quot;highlighter-rouge&quot;&gt;TIME_WAIT&lt;/code&gt;的server仍旧绑定在相同的地址和端口上。因此实际使用时会设置这个选项利于调试。&lt;/li&gt;
 &lt;/ol&gt;
 
 &lt;h4 id=&quot;so_reuseport&quot;&gt;SO_REUSEPORT&lt;/h4&gt;
 
 &lt;p&gt;这个选项的作用&lt;a href=&quot;http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t&quot;&gt;戳这&lt;/a&gt;是允许多个socket绑定相同的地址和端口，唯一的要求是所有绑定到这个地址和端口的socket都必须设置这个选项。这个功能常见的应用是实现负载均衡。
-但是这个选项并不能完全替代&lt;code&gt;SO_REUSEADDR&lt;/code&gt;，比如serverA绑定到ip:port，然后处于TIME_WAIT状态，此时serverB也绑定到相同的地址，只有两种情况才不会出现EADDRINUSE，一种是serverB设置了&lt;code&gt;SO_REUSEADDR&lt;/code&gt;，另外一种情况是serverA和serverB都设置了&lt;code&gt;SO_REUSEPORT&lt;/code&gt;。&lt;/p&gt;
+但是这个选项并不能完全替代&lt;code class=&quot;highlighter-rouge&quot;&gt;SO_REUSEADDR&lt;/code&gt;，比如serverA绑定到ip:port，然后处于TIME_WAIT状态，此时serverB也绑定到相同的地址，只有两种情况才不会出现EADDRINUSE，一种是serverB设置了&lt;code class=&quot;highlighter-rouge&quot;&gt;SO_REUSEADDR&lt;/code&gt;，另外一种情况是serverA和serverB都设置了&lt;code class=&quot;highlighter-rouge&quot;&gt;SO_REUSEPORT&lt;/code&gt;。&lt;/p&gt;
 
 &lt;h4 id=&quot;socket连接&quot;&gt;socket连接&lt;/h4&gt;
 &lt;ol&gt;
-  &lt;li&gt;设置tcp &lt;code&gt;keep-alive&lt;/code&gt;时刻检查网络连接是否有效，比如当网络断掉时，可能无法完成四次握手导致server无法知道连接是否有效，而&lt;code&gt;keep-alive&lt;/code&gt;会每隔一段实际来检查连接是否仍然有效。&lt;/li&gt;
-  &lt;li&gt;设置 &lt;code&gt;SOL_LINGER&lt;/code&gt; 的作用是改变调用close时系统的操作，默认情况下是进行四次挥手结束连接，可能将发送缓冲区的数据发送给对方。&lt;/li&gt;
+  &lt;li&gt;设置tcp &lt;code class=&quot;highlighter-rouge&quot;&gt;keep-alive&lt;/code&gt;时刻检查网络连接是否有效，比如当网络断掉时，可能无法完成四次握手导致server无法知道连接是否有效，而&lt;code class=&quot;highlighter-rouge&quot;&gt;keep-alive&lt;/code&gt;会每隔一段实际来检查连接是否仍然有效。&lt;/li&gt;
+  &lt;li&gt;设置 &lt;code class=&quot;highlighter-rouge&quot;&gt;SOL_LINGER&lt;/code&gt; 的作用是改变调用close时系统的操作，默认情况下是进行四次挥手结束连接，可能将发送缓冲区的数据发送给对方。&lt;/li&gt;
   &lt;li&gt;设置tcp nodelay选项的原因是禁用Nagel’s算法：
     &lt;blockquote&gt;
       &lt;p&gt;The algorithm is: if data is smaller than a limit (usually MSS), wait until receiving ACK for previously sent packets and in the mean time accumulate data from user. Then send the accumulated data.&lt;/p&gt;
@@ -350,9 +353,9 @@ int daemonize(int nochdir, int noclose)
 
 &lt;p&gt;&lt;strong&gt;初始化&lt;/strong&gt; 如果类中定义了成员变量，则必须在类中为每个类提供初始化函数或定义一个构造函数。若未声明构造函数，则编译器会生成一个默认的构造函数，这有可能导致某些成员未被初始化或被初始化为不恰当的值。&lt;/p&gt;
 
-&lt;p&gt;在类成员里面进行初始化是指声明一个成员变量的时候使用一个结构例如&lt;code&gt;int _count = 17&lt;/code&gt;或者&lt;code&gt;string _name{&quot;abc&quot;}&lt;/code&gt;来替代&lt;code&gt;int _count&lt;/code&gt;或者&lt;code&gt;string _name&lt;/code&gt;这样的形式。&lt;/p&gt;
+&lt;p&gt;在类成员里面进行初始化是指声明一个成员变量的时候使用一个结构例如&lt;code class=&quot;highlighter-rouge&quot;&gt;int _count = 17&lt;/code&gt;或者&lt;code class=&quot;highlighter-rouge&quot;&gt;string _name{&quot;abc&quot;}&lt;/code&gt;来替代&lt;code class=&quot;highlighter-rouge&quot;&gt;int _count&lt;/code&gt;或者&lt;code class=&quot;highlighter-rouge&quot;&gt;string _name&lt;/code&gt;这样的形式。&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;显式构造函数&lt;/strong&gt; 对单个参数的构造函数使用&lt;code&gt;C++&lt;/code&gt;关键字&lt;code&gt;explici&lt;/code&gt;。除单参数构造函数外，这一规则也适用于除第一个参数以外的其他参数都具有默认参数的构造函数。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;显式构造函数&lt;/strong&gt; 对单个参数的构造函数使用&lt;code class=&quot;highlighter-rouge&quot;&gt;C++&lt;/code&gt;关键字&lt;code class=&quot;highlighter-rouge&quot;&gt;explici&lt;/code&gt;。除单参数构造函数外，这一规则也适用于除第一个参数以外的其他参数都具有默认参数的构造函数。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;可拷贝类型和可移动类型&lt;/strong&gt; 如果你的类型需要, 就让它们支持拷贝/移动。否则，就把隐式产生的拷贝和移动函数禁用。
 一般都会将拷贝构造函数给禁掉。如果基类存在拷贝构造函数，那么对于子类来说，如果在实现子类的拷贝构造函数时忘了显示的调用基类的拷贝构造函数，编译器会在我们定义的子类拷贝构造函数中插入调用基类的默认构造函数，而不是基类的对应的拷贝构造函数。&lt;/p&gt;
@@ -383,13 +386,13 @@ int daemonize(int nochdir, int noclose)
 
 &lt;p&gt;&lt;strong&gt;运算符重载&lt;/strong&gt; 除少数特定环境外，不要重载运算符。一般不要重载运算符. 尤其是赋值操作 (operator=) 比较诡异, 应避免重载. 如果需要的话, 可以定义类似 Equals(), CopyFrom() 等函数。&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;存取控制&lt;/strong&gt; 将所有数据成员声明为 private, 并根据需要提供相应的存取函数. 例如, 某个名为&lt;code&gt;foo_&lt;/code&gt;的变量, 其取值函数是&lt;code&gt;foo()&lt;/code&gt;. 还可能需要一个赋值函数&lt;code&gt;set_foo()&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;存取控制&lt;/strong&gt; 将所有数据成员声明为 private, 并根据需要提供相应的存取函数. 例如, 某个名为&lt;code class=&quot;highlighter-rouge&quot;&gt;foo_&lt;/code&gt;的变量, 其取值函数是&lt;code class=&quot;highlighter-rouge&quot;&gt;foo()&lt;/code&gt;. 还可能需要一个赋值函数&lt;code class=&quot;highlighter-rouge&quot;&gt;set_foo()&lt;/code&gt;.&lt;/p&gt;
 
-&lt;p&gt;特例是, 静态常量数据成员 (一般写做&lt;code&gt;kFoo&lt;/code&gt;) 不需要是私有成员.&lt;/p&gt;
+&lt;p&gt;特例是, 静态常量数据成员 (一般写做&lt;code class=&quot;highlighter-rouge&quot;&gt;kFoo&lt;/code&gt;) 不需要是私有成员.&lt;/p&gt;
 
 &lt;p&gt;一般在头文件中把存取函数定义成内联函数.&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;声明顺序&lt;/strong&gt; 在类中使用特定的声明顺序:&lt;code&gt;public:&lt;/code&gt;在&lt;code&gt;private:&lt;/code&gt;之前, 成员函数在数据成员 (变量) 前。
+&lt;p&gt;&lt;strong&gt;声明顺序&lt;/strong&gt; 在类中使用特定的声明顺序:&lt;code class=&quot;highlighter-rouge&quot;&gt;public:&lt;/code&gt;在&lt;code class=&quot;highlighter-rouge&quot;&gt;private:&lt;/code&gt;之前, 成员函数在数据成员 (变量) 前。
 每个区段内的声明通常按以下顺序:&lt;/p&gt;
 &lt;ul&gt;
   &lt;li&gt;typedefs 和枚举&lt;/li&gt;
@@ -400,7 +403,7 @@ int daemonize(int nochdir, int noclose)
   &lt;li&gt;数据成员, 含静态数据成员&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;友元声明应该放在 private 区段. 如果用宏&lt;code&gt;DISALLOW_COPY_AND_ASSIGN&lt;/code&gt; 禁用拷贝和赋值, 应当将其置于 private 区段的末尾, 也即整个类声明的末尾. 参见可拷贝类型和可移动类型.&lt;/p&gt;
+&lt;p&gt;友元声明应该放在 private 区段. 如果用宏&lt;code class=&quot;highlighter-rouge&quot;&gt;DISALLOW_COPY_AND_ASSIGN&lt;/code&gt; 禁用拷贝和赋值, 应当将其置于 private 区段的末尾, 也即整个类声明的末尾. 参见可拷贝类型和可移动类型.&lt;/p&gt;
 
 &lt;p&gt;不要在类定义中内联大型函数. 通常, 只有那些没有特别意义或性能要求高, 并且是比较短小的函数才能被定义为内联函数。&lt;/p&gt;
 
@@ -424,7 +427,7 @@ int daemonize(int nochdir, int noclose)
 其二，可以在构造函数里用缺省参数，毕竟不可能取得它们的地址。
 其三，可以用来模拟变长数组。&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;变长数组和 alloca()&lt;/strong&gt; 我们不允许使用变长数组和&lt;code&gt;alloca()&lt;/code&gt;。改用更安全的分配器&lt;code&gt;（allocator）&lt;/code&gt;，就像 &lt;code&gt;std::vector&lt;/code&gt; 或 &lt;code&gt;std::unique_ptr&amp;lt;T[]&amp;gt;&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;变长数组和 alloca()&lt;/strong&gt; 我们不允许使用变长数组和&lt;code class=&quot;highlighter-rouge&quot;&gt;alloca()&lt;/code&gt;。改用更安全的分配器&lt;code class=&quot;highlighter-rouge&quot;&gt;（allocator）&lt;/code&gt;，就像 &lt;code class=&quot;highlighter-rouge&quot;&gt;std::vector&lt;/code&gt; 或 &lt;code class=&quot;highlighter-rouge&quot;&gt;std::unique_ptr&amp;lt;T[]&amp;gt;&lt;/code&gt;。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;友元&lt;/strong&gt; 我们允许合理的使用友元类及友元函数。
 通常友元应该定义在同一文件内, 避免代码读者跑到其它文件查找使用该私有成员的类. 经常用到友元的一个地方是将 FooBuilder 声明为 Foo 的友元, 以便 FooBuilder 正确构造 Foo 的内部状态, 而无需将该状态暴露出来. 某些情况下, 将一个单元测试类声明成待测类的友元会很方便。&lt;/p&gt;
@@ -438,27 +441,27 @@ int daemonize(int nochdir, int noclose)
 
 &lt;p&gt;&lt;strong&gt;运行时类型识别&lt;/strong&gt; 我们禁止使用 RTTI.在运行时判断类型通常意味着设计问题. 如果你需要在运行期间确定一个对象的类型, 这通常说明你需要考虑重新设计你的类.随意地使用 RTTI 会使你的代码难以维护. 它使得基于类型的判断树或者 switch 语句散布在代码各处. 如果以后要进行修改, 你就必须检查它们.RTTI 有合理的用途但是容易被滥用, 因此在使用时请务必注意. 在单元测试中可以使用 RTTI, 但是在其他代码中请尽量避免.&lt;/p&gt;
 
-&lt;p&gt;替代方案： 使用虚函数、使用访问者设计模式和使用&lt;code&gt;dynamic_cast&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;替代方案： 使用虚函数、使用访问者设计模式和使用&lt;code class=&quot;highlighter-rouge&quot;&gt;dynamic_cast&lt;/code&gt;。&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;类型转换&lt;/strong&gt; 使用 C++ 的类型转换, 如 &lt;code&gt;static_cast&amp;lt;&amp;gt;()&lt;/code&gt;. 不要使用 &lt;code&gt;int y = (int)x&lt;/code&gt; 或 &lt;code&gt;int y = int(x)&lt;/code&gt; 等转换方式。
+&lt;p&gt;&lt;strong&gt;类型转换&lt;/strong&gt; 使用 C++ 的类型转换, 如 &lt;code class=&quot;highlighter-rouge&quot;&gt;static_cast&amp;lt;&amp;gt;()&lt;/code&gt;. 不要使用 &lt;code class=&quot;highlighter-rouge&quot;&gt;int y = (int)x&lt;/code&gt; 或 &lt;code class=&quot;highlighter-rouge&quot;&gt;int y = int(x)&lt;/code&gt; 等转换方式。
 不要使用 C 风格类型转换. 而应该使用 C++ 风格。&lt;/p&gt;
 &lt;ul&gt;
-  &lt;li&gt;用 &lt;code&gt;static_cast&lt;/code&gt; 替代 C 风格的值转换, 或某个类指针需要明确的向上转换为父类指针时。&lt;/li&gt;
-  &lt;li&gt;用 &lt;code&gt;const_cast&lt;/code&gt; 去掉 &lt;code&gt;const&lt;/code&gt; 限定符。&lt;/li&gt;
-  &lt;li&gt;用 &lt;code&gt;reinterpret_cast&lt;/code&gt; 指针类型和整型或其它指针之间进行不安全的相互转换. 仅在你对所做一切了然于心时使用.这个操作符能够在非相关的类型之间转换. 操作结果只是简单的从一个指针到别的指针的值的 二进制拷贝. 在类型之间指向的内容不做任何类型的检查和转换。&lt;/li&gt;
-  &lt;li&gt;&lt;code&gt;dynamic_cast&lt;/code&gt;用于安全的向下转换，当不能进行安全转换时，对于指针则返回NULL, 对于引用类型则会抛出&lt;code&gt;bad cast exception&lt;/code&gt;。&lt;/li&gt;
+  &lt;li&gt;用 &lt;code class=&quot;highlighter-rouge&quot;&gt;static_cast&lt;/code&gt; 替代 C 风格的值转换, 或某个类指针需要明确的向上转换为父类指针时。&lt;/li&gt;
+  &lt;li&gt;用 &lt;code class=&quot;highlighter-rouge&quot;&gt;const_cast&lt;/code&gt; 去掉 &lt;code class=&quot;highlighter-rouge&quot;&gt;const&lt;/code&gt; 限定符。&lt;/li&gt;
+  &lt;li&gt;用 &lt;code class=&quot;highlighter-rouge&quot;&gt;reinterpret_cast&lt;/code&gt; 指针类型和整型或其它指针之间进行不安全的相互转换. 仅在你对所做一切了然于心时使用.这个操作符能够在非相关的类型之间转换. 操作结果只是简单的从一个指针到别的指针的值的 二进制拷贝. 在类型之间指向的内容不做任何类型的检查和转换。&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;dynamic_cast&lt;/code&gt;用于安全的向下转换，当不能进行安全转换时，对于指针则返回NULL, 对于引用类型则会抛出&lt;code class=&quot;highlighter-rouge&quot;&gt;bad cast exception&lt;/code&gt;。&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;strong&gt;流&lt;/strong&gt; 只在记录日志时使用流。不要使用流, 除非是日志接口需要. 使用&lt;code&gt;printf&lt;/code&gt;之类的代替。
+&lt;p&gt;&lt;strong&gt;流&lt;/strong&gt; 只在记录日志时使用流。不要使用流, 除非是日志接口需要. 使用&lt;code class=&quot;highlighter-rouge&quot;&gt;printf&lt;/code&gt;之类的代替。
 使用流还有很多利弊, 但代码一致性胜过一切. 不要在代码中使用流.&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;前置自增和自减&lt;/strong&gt; 对于迭代器和其他模板对象使用前缀形式&lt;code&gt;(++i)&lt;/code&gt;的自增, 自减运算符.
+&lt;p&gt;&lt;strong&gt;前置自增和自减&lt;/strong&gt; 对于迭代器和其他模板对象使用前缀形式&lt;code class=&quot;highlighter-rouge&quot;&gt;(++i)&lt;/code&gt;的自增, 自减运算符.
 不考虑返回值的话, 前置自增 (++i) 通常要比后置自增 (i++) 效率更高. 因为后置自增 (或自减) 需要对表达式的值 i 进行一次拷贝.&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;const 用法&lt;/strong&gt; 我们强烈建议你在任何可能的情况下都要使用&lt;code&gt;const&lt;/code&gt;. 此外有时改用&lt;code&gt;C++11&lt;/code&gt;推出的 &lt;code&gt;constexpr&lt;/code&gt;更好。
+&lt;p&gt;&lt;strong&gt;const 用法&lt;/strong&gt; 我们强烈建议你在任何可能的情况下都要使用&lt;code class=&quot;highlighter-rouge&quot;&gt;const&lt;/code&gt;. 此外有时改用&lt;code class=&quot;highlighter-rouge&quot;&gt;C++11&lt;/code&gt;推出的 &lt;code class=&quot;highlighter-rouge&quot;&gt;constexpr&lt;/code&gt;更好。
 建议使用const的地方。&lt;/p&gt;
 &lt;ul&gt;
-  &lt;li&gt;如果函数不会修改传你入的引用或指针类型参数, 该参数应声明为&lt;code&gt;const&lt;/code&gt;.&lt;/li&gt;
+  &lt;li&gt;如果函数不会修改传你入的引用或指针类型参数, 该参数应声明为&lt;code class=&quot;highlighter-rouge&quot;&gt;const&lt;/code&gt;.&lt;/li&gt;
   &lt;li&gt;尽可能将函数声明为 const. 访问函数应该总是 const. 其他不会修改任何数据成员, 未调用非 const 函数, 不会返回数据成员非 const 指针或引用的函数也应该声明成 const.&lt;/li&gt;
   &lt;li&gt;如果数据成员在对象构造之后不再发生变化, 可将其定义为 const.&lt;/li&gt;
   &lt;li&gt;尽可能将函数声明为 const. 访问函数应该总是 const. 其他不会修改任何数据成员, 未调用非 const 函数, 不会返回数据成员非 const 指针或引用的函数也应该声明成 const.&lt;/li&gt;
@@ -469,11 +472,11 @@ int daemonize(int nochdir, int noclose)
 
 &lt;p&gt;&lt;strong&gt;整型&lt;/strong&gt; 使用断言来指出变量为非负数, 而不是使用无符号型!&lt;/p&gt;
 
-&lt;p&gt;C++ 内建整型中, 仅使用 int. 如果程序中需要不同大小的变量, 可以使用 &lt;code&gt;&amp;lt;stdint.h&amp;gt;&lt;/code&gt; 中长度精确的整型, 如 &lt;code&gt;int16_t&lt;/code&gt;.如果您的变量可能不小于 &lt;code&gt;2^31 (2GiB)&lt;/code&gt;, 就用 64 位变量比如 &lt;code&gt;int64_t&lt;/code&gt;. 此外要留意，哪怕您的值并不会超出 int 所能够表示的范围，在计算过程中也可能会溢出。所以拿不准时，干脆用更大的类型。&lt;/p&gt;
+&lt;p&gt;C++ 内建整型中, 仅使用 int. 如果程序中需要不同大小的变量, 可以使用 &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;stdint.h&amp;gt;&lt;/code&gt; 中长度精确的整型, 如 &lt;code class=&quot;highlighter-rouge&quot;&gt;int16_t&lt;/code&gt;.如果您的变量可能不小于 &lt;code class=&quot;highlighter-rouge&quot;&gt;2^31 (2GiB)&lt;/code&gt;, 就用 64 位变量比如 &lt;code class=&quot;highlighter-rouge&quot;&gt;int64_t&lt;/code&gt;. 此外要留意，哪怕您的值并不会超出 int 所能够表示的范围，在计算过程中也可能会溢出。所以拿不准时，干脆用更大的类型。&lt;/p&gt;
 
-&lt;p&gt;不要使用 &lt;code&gt;uint32_t&lt;/code&gt; 等无符号整型, 除非你是在表示一个位组而不是一个数值, 或是你需要定义二进制补码溢出. 尤其是不要为了指出数值永不会为负, 而使用无符号类型. 相反, 你应该使用断言来保护数据.&lt;/p&gt;
+&lt;p&gt;不要使用 &lt;code class=&quot;highlighter-rouge&quot;&gt;uint32_t&lt;/code&gt; 等无符号整型, 除非你是在表示一个位组而不是一个数值, 或是你需要定义二进制补码溢出. 尤其是不要为了指出数值永不会为负, 而使用无符号类型. 相反, 你应该使用断言来保护数据.&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;64 位下的可移植性&lt;/strong&gt; 你要非常小心的对待结构体对齐, 尤其是要持久化到磁盘上的结构体。在 64 位系统中, 任何含有 &lt;code&gt;int64_t/uint64_t&lt;/code&gt; 成员的类/结构体, 缺省都以 8 字节在结尾对齐. 如果 32 位和 64 位代码要共用持久化的结构体, 需要确保两种体系结构下的结构体对齐一致. 大多数编译器都允许调整结构体对齐. gcc 中可使用 &lt;code&gt;__attribute__((packed))&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;64 位下的可移植性&lt;/strong&gt; 你要非常小心的对待结构体对齐, 尤其是要持久化到磁盘上的结构体。在 64 位系统中, 任何含有 &lt;code class=&quot;highlighter-rouge&quot;&gt;int64_t/uint64_t&lt;/code&gt; 成员的类/结构体, 缺省都以 8 字节在结尾对齐. 如果 32 位和 64 位代码要共用持久化的结构体, 需要确保两种体系结构下的结构体对齐一致. 大多数编译器都允许调整结构体对齐. gcc 中可使用 &lt;code class=&quot;highlighter-rouge&quot;&gt;__attribute__((packed))&lt;/code&gt;。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;预处理宏&lt;/strong&gt; 使用宏时要非常谨慎, 尽量以内联函数, 枚举和常量代替之。
 下面给出的用法模式可以避免使用宏带来的问题; 如果你要宏, 尽可能遵守:&lt;/p&gt;
@@ -487,7 +490,7 @@ int daemonize(int nochdir, int noclose)
 
 &lt;p&gt;&lt;strong&gt;nullptr 和 NULL&lt;/strong&gt; 对于指针 (地址值), 到底是用 0, NULL 还是 nullptr. C++11 项目用 nullptr; C++03 项目则用 NULL, 毕竟它看起来像指针。实际上，一些 C++ 编译器对 NULL 的定义比较特殊，可以输出有用的警告，特别是 sizeof(NULL) 就和 sizeof(0) 不一样。&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;sizeof&lt;/strong&gt; 尽可能用 &lt;code&gt;sizeof(varname)&lt;/code&gt; 代替 &lt;code&gt;sizeof(type)&lt;/code&gt;。使用&lt;code&gt;sizeof(varname)&lt;/code&gt; 是因为当代码中变量类型改变时会自动更新。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;sizeof&lt;/strong&gt; 尽可能用 &lt;code class=&quot;highlighter-rouge&quot;&gt;sizeof(varname)&lt;/code&gt; 代替 &lt;code class=&quot;highlighter-rouge&quot;&gt;sizeof(type)&lt;/code&gt;。使用&lt;code class=&quot;highlighter-rouge&quot;&gt;sizeof(varname)&lt;/code&gt; 是因为当代码中变量类型改变时会自动更新。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;auto&lt;/strong&gt; 用 auto 绕过烦琐的类型名，只要可读性好就继续用，别用在局部变量之外的地方。&lt;/p&gt;
 
@@ -503,30 +506,30 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 &lt;p&gt;&lt;strong&gt;类型命名&lt;/strong&gt; 类型名称的每个单词首字母均大写, 不包含下划线: MyExcitingClass, MyExcitingEnum.&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;变量命名&lt;/strong&gt; 变量名一律小写, 单词之间用下划线连接. 类的成员变量以下划线结尾, 但结构体的就不用，如&lt;code&gt;::a_local_variable&lt;/code&gt;, &lt;code&gt;a_struct_data_member&lt;/code&gt;, &lt;code&gt;a_class_data_member_&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;变量命名&lt;/strong&gt; 变量名一律小写, 单词之间用下划线连接. 类的成员变量以下划线结尾, 但结构体的就不用，如&lt;code class=&quot;highlighter-rouge&quot;&gt;::a_local_variable&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;a_struct_data_member&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;a_class_data_member_&lt;/code&gt;.&lt;/p&gt;
 &lt;ul&gt;
   &lt;li&gt;类数据成员：不管是静态的还是非静态的，类数据成员都可以和普通变量一样, 但要接下划线。&lt;/li&gt;
   &lt;li&gt;结构体变量:不管是静态的还是非静态的，结构体数据成员都可以和普通变量一样, 不用像类那样接下划线。&lt;/li&gt;
-  &lt;li&gt;对全局变量没有特别要求, 少用就好, 但如果你要用, 可以用 &lt;code&gt;g_&lt;/code&gt; 或其它标志作为前缀, 以便更好的区分局部变量.&lt;/li&gt;
+  &lt;li&gt;对全局变量没有特别要求, 少用就好, 但如果你要用, 可以用 &lt;code class=&quot;highlighter-rouge&quot;&gt;g_&lt;/code&gt; 或其它标志作为前缀, 以便更好的区分局部变量.&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;&lt;strong&gt;常量命名&lt;/strong&gt; 在全局或类里的常量名称前加 k: &lt;code&gt;kDaysInAWeek&lt;/code&gt;. 且除去开头的 k 之外每个单词开头字母均大写。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;常量命名&lt;/strong&gt; 在全局或类里的常量名称前加 k: &lt;code class=&quot;highlighter-rouge&quot;&gt;kDaysInAWeek&lt;/code&gt;. 且除去开头的 k 之外每个单词开头字母均大写。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;函数命名&lt;/strong&gt; 常规函数: 函数名的每个单词首字母大写, 没有下划线。
 取值和设值函数: 取值（Accessors）和设值（Mutators）函数要与存取的变量名匹配。&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;名字空间命名&lt;/strong&gt; 名字空间用小写字母命名, 并基于项目名称和目录结构: &lt;code&gt;google_awesome_project&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;名字空间命名&lt;/strong&gt; 名字空间用小写字母命名, 并基于项目名称和目录结构: &lt;code class=&quot;highlighter-rouge&quot;&gt;google_awesome_project&lt;/code&gt;。&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;枚举命名&lt;/strong&gt; 枚举的命名应当和 常量 或 宏 一致: &lt;code&gt;kEnumName&lt;/code&gt; 或是 &lt;code&gt;ENUM_NAME&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;枚举命名&lt;/strong&gt; 枚举的命名应当和 常量 或 宏 一致: &lt;code class=&quot;highlighter-rouge&quot;&gt;kEnumName&lt;/code&gt; 或是 &lt;code class=&quot;highlighter-rouge&quot;&gt;ENUM_NAME&lt;/code&gt;.&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;宏命名&lt;/strong&gt; 像这样命名: &lt;code&gt;MY_MACRO_THAT_SCARES_SMALL_CHILDREN&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;宏命名&lt;/strong&gt; 像这样命名: &lt;code class=&quot;highlighter-rouge&quot;&gt;MY_MACRO_THAT_SCARES_SMALL_CHILDREN&lt;/code&gt;。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;命名规则的特例&lt;/strong&gt; 如果你命名的实体与已有 C/C++ 实体相似, 可参考现有命名策略.
-&lt;code&gt;bigopen()&lt;/code&gt; 参照　&lt;code&gt;open()&lt;/code&gt;, &lt;code&gt;uint&lt;/code&gt; 使用　typedef, &lt;code&gt;LONGLONG_MAX&lt;/code&gt; 参照常量&lt;code&gt;INT_MAX&lt;/code&gt;。&lt;/p&gt;
+&lt;code class=&quot;highlighter-rouge&quot;&gt;bigopen()&lt;/code&gt; 参照　&lt;code class=&quot;highlighter-rouge&quot;&gt;open()&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;uint&lt;/code&gt; 使用　typedef, &lt;code class=&quot;highlighter-rouge&quot;&gt;LONGLONG_MAX&lt;/code&gt; 参照常量&lt;code class=&quot;highlighter-rouge&quot;&gt;INT_MAX&lt;/code&gt;。&lt;/p&gt;
 
 &lt;h4 id=&quot;注释&quot;&gt;注释&lt;/h4&gt;
 
-&lt;p&gt;&lt;strong&gt;注释风格&lt;/strong&gt; 使用 &lt;code&gt;//&lt;/code&gt; 或 &lt;code&gt;/* */&lt;/code&gt;, 统一就好.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;注释风格&lt;/strong&gt; 使用 &lt;code class=&quot;highlighter-rouge&quot;&gt;//&lt;/code&gt; 或 &lt;code class=&quot;highlighter-rouge&quot;&gt;/* */&lt;/code&gt;, 统一就好.&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;文件注释&lt;/strong&gt; 在每一个文件开头加入版权公告, 然后是文件内容描述.
 每个文件都应该包含以下项, 依次是:&lt;/p&gt;
@@ -548,7 +551,7 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 &lt;p&gt;&lt;strong&gt;TODO 注释&lt;/strong&gt; 对那些临时的, 短期的解决方案, 或已经够好但仍不完美的代码使用 TODO 注释.&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;弃用注释&lt;/strong&gt; 通过弃用注释（&lt;code&gt;DEPRECATED&lt;/code&gt; comments）以标记某接口点（interface points）已弃用。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;弃用注释&lt;/strong&gt; 通过弃用注释（&lt;code class=&quot;highlighter-rouge&quot;&gt;DEPRECATED&lt;/code&gt; comments）以标记某接口点（interface points）已弃用。&lt;/p&gt;
 
 &lt;h4 id=&quot;格式&quot;&gt;格式&lt;/h4&gt;
 
@@ -583,7 +586,7 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 &lt;p&gt;&lt;strong&gt;循环和开关选择语句&lt;/strong&gt; switch 语句可以使用大括号分段，以表明 cases 之间不是连在一起的。在单语句循环里，括号可用可不用。空循环体应使用 {} 或 continue.&lt;/p&gt;
 
-&lt;p&gt;如果有不满足 case 条件的枚举值, switch 应该总是包含一个 default 匹配 (如果有输入值没有 case 去处理, 编译器将报警). 如果 default 应该永远执行不到, 简单的加条 &lt;code&gt;assert(false)&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;如果有不满足 case 条件的枚举值, switch 应该总是包含一个 default 匹配 (如果有输入值没有 case 去处理, 编译器将报警). 如果 default 应该永远执行不到, 简单的加条 &lt;code class=&quot;highlighter-rouge&quot;&gt;assert(false)&lt;/code&gt;&lt;/p&gt;
 
 &lt;p&gt;空循环体应使用 {} 或 continue, 而不是一个简单的分号.&lt;/p&gt;
 
@@ -593,7 +596,7 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 &lt;p&gt;&lt;strong&gt;函数返回值&lt;/strong&gt; return 表达式里时没必要都用圆括号。&lt;/p&gt;
 
-&lt;p&gt;&lt;strong&gt;变量及数组初始化&lt;/strong&gt; 用 =, () 和 {} 均可. 为了强制禁用 &lt;code&gt;std::initializer_list&lt;/code&gt; 构造函数，请改用括号。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;变量及数组初始化&lt;/strong&gt; 用 =, () 和 {} 均可. 为了强制禁用 &lt;code class=&quot;highlighter-rouge&quot;&gt;std::initializer_list&lt;/code&gt; 构造函数，请改用括号。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;预处理指令&lt;/strong&gt; 预处理指令不要缩进, 从行首开始.&lt;/p&gt;
 
@@ -625,13 +628,15 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 &lt;p&gt;&lt;strong&gt;Template 的“实例化“行为&lt;/strong&gt;
 以下的指针初始化操作不会导致Template的实例化。&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;Point&amp;lt; float &amp;gt; *ptr = 0;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Point&amp;lt; float &amp;gt; *ptr = 0;
 &lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
 &lt;p&gt;因为一个指向class object的指针，本身并不是一个class object，编译器不需要知道与该class有关的任何members的数据或object布局数据。&lt;/p&gt;
 
 &lt;p&gt;但是将上面的指针换为reference，则会有相应的Template被实例化。&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;Point&amp;lt; float &amp;gt; &amp;amp;ptr = 0;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Point&amp;lt; float &amp;gt; &amp;amp;ptr = 0;
 &lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
 &lt;p&gt;原因是reference必须绑定到一个对象上面，因此这里的0将被转化为Point&amp;lt; float &amp;gt;的对象，如果类中没有提供这个转化操作则会出现编译错误。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;Template Member Function 的实例化&lt;/strong&gt;
@@ -640,7 +645,7 @@ member functions只有当被使用时才会被实例化。&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Template 中的名称决议法&lt;/strong&gt;&lt;/p&gt;
 
 &lt;p&gt;在Template中，对于一个nonmember name的决议结果，是根据这个那么的使用是否与”用以实例化该template的参数类型“有关而决定的。如果使用不相关，那么就以”scope of the template declaration“ 来决定name。如果其使用互有关联，那么就以”scope of the template instantiation“ 来决定name。举个例子。&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;// scope of the template definition
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;// scope of the template definition
 extern double foo(double);
 
 template &amp;lt;class type&amp;gt;
@@ -675,6 +680,7 @@ ScopeRules&amp;lt; double &amp;gt; sr1;
 sr1.invarint(); // 调用 double foo(double);
 sr1.type_dependent(); // 调用 double foo(double);
 &lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
 
 &lt;h3 id=&quot;异常处理&quot;&gt;异常处理&lt;/h3&gt;
 
@@ -685,16 +691,16 @@ sr1.type_dependent(); // 调用 double foo(double);
 &lt;p&gt;C++的RTTI机制提供了一个安全的downcast设备，但只对那些展现”多态“的类型有效。具体的实现是每个多态类型的对象中维护一个指针vptr指向virtual table，一般virtual table的第一个slot中存放与该class有关的类型信息RTTI object地址。这个信息只会被设定一次，是由编译器静态设定的。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;Type-Safe Dynamic Cast&lt;/strong&gt;
-&lt;code&gt;dynamic_cast&lt;/code&gt; 运算符能够在执行期决定真正的类型。如果downcast是安全的（此时base pointer指向一个derived object），这个运算符会返回一个经过适当转换的指针；如果不是安全的，这个运算符会返回0。&lt;/p&gt;
+&lt;code class=&quot;highlighter-rouge&quot;&gt;dynamic_cast&lt;/code&gt; 运算符能够在执行期决定真正的类型。如果downcast是安全的（此时base pointer指向一个derived object），这个运算符会返回一个经过适当转换的指针；如果不是安全的，这个运算符会返回0。&lt;/p&gt;
 
-&lt;p&gt;&lt;code&gt;dynamic_cast&lt;/code&gt; 实际的实现是取得指针所指对象的真正类型，这个类型信息的地址存在于vptr所指的virtual table的第一个slot中，类型信息类型为&lt;code&gt;type_info&lt;/code&gt; object。&lt;code&gt;type_info&lt;/code&gt;中一般存放的是相应类型的名字，&lt;code&gt;dynamic_cast&lt;/code&gt; 取出输入的指针所指对象的类型信息和要转换的对象的类型信息进行比较，如果相等则说明是可以安全转换的并返回适当转换后的指针，否则返回0。&lt;/p&gt;
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;dynamic_cast&lt;/code&gt; 实际的实现是取得指针所指对象的真正类型，这个类型信息的地址存在于vptr所指的virtual table的第一个slot中，类型信息类型为&lt;code class=&quot;highlighter-rouge&quot;&gt;type_info&lt;/code&gt; object。&lt;code class=&quot;highlighter-rouge&quot;&gt;type_info&lt;/code&gt;中一般存放的是相应类型的名字，&lt;code class=&quot;highlighter-rouge&quot;&gt;dynamic_cast&lt;/code&gt; 取出输入的指针所指对象的类型信息和要转换的对象的类型信息进行比较，如果相等则说明是可以安全转换的并返回适当转换后的指针，否则返回0。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;References 并不是 Pointers&lt;/strong&gt;&lt;/p&gt;
 
-&lt;p&gt;&lt;code&gt;dynamic_cast&lt;/code&gt; 也可以作用于reference，但是当不能安全转换时，并不能直接返回0,而是一个对象。因此，当能够安全的downcast，即输入的reference是参考到derived class，downcast会被安全执行。当不能够安全的downcast时，则会抛出一个&lt;code&gt;bad_cast exception&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;dynamic_cast&lt;/code&gt; 也可以作用于reference，但是当不能安全转换时，并不能直接返回0,而是一个对象。因此，当能够安全的downcast，即输入的reference是参考到derived class，downcast会被安全执行。当不能够安全的downcast时，则会抛出一个&lt;code class=&quot;highlighter-rouge&quot;&gt;bad_cast exception&lt;/code&gt;。&lt;/p&gt;
 
 &lt;p&gt;&lt;strong&gt;Typeid 运算符&lt;/strong&gt;
-使用typeid运算符能够取出指针或者reference所指代的对象的类型信息，传回一个const reference，类型为&lt;code&gt;type_info&lt;/code&gt;。&lt;/p&gt;
+使用typeid运算符能够取出指针或者reference所指代的对象的类型信息，传回一个const reference，类型为&lt;code class=&quot;highlighter-rouge&quot;&gt;type_info&lt;/code&gt;。&lt;/p&gt;
 
 &lt;p&gt;另外用于RTTI机制的这些运算符的具体的运行时间得看输入的指针或者reference所指代的对象是否是多态的。如果是则会在运行时期才能取得其类型信息，否则则会静态取得。&lt;/p&gt;
 </description>
@@ -777,12 +783,12 @@ sr1.type_dependent(); // 调用 double foo(double);
 &lt;p&gt;&lt;strong&gt;operator new&lt;/strong&gt;&lt;/p&gt;
 &lt;ul&gt;
   &lt;li&gt;当要分配的大小为0时，operator new 将会分配一个字节的内存空间，并将其地址返回。&lt;/li&gt;
-  &lt;li&gt;operator new 支持用户设置&lt;code&gt;_new_handler()&lt;/code&gt;，当内存分配出现错误时这个函数将会被调用。&lt;/li&gt;
+  &lt;li&gt;operator new 支持用户设置&lt;code class=&quot;highlighter-rouge&quot;&gt;_new_handler()&lt;/code&gt;，当内存分配出现错误时这个函数将会被调用。&lt;/li&gt;
 &lt;/ul&gt;
 
 &lt;p&gt;&lt;strong&gt;new 和数组&lt;/strong&gt;&lt;/p&gt;
 &lt;ul&gt;
-  &lt;li&gt;对数组的分配和释放应该使用成对的格式。如&lt;code&gt;new arr[N]; ...; delete [] arr&lt;/code&gt;。&lt;/li&gt;
+  &lt;li&gt;对数组的分配和释放应该使用成对的格式。如&lt;code class=&quot;highlighter-rouge&quot;&gt;new arr[N]; ...; delete [] arr&lt;/code&gt;。&lt;/li&gt;
   &lt;li&gt;释放数组时，应该调用数组元素的实际类型，如下所示。
 ```
 class Point; // Base class
@@ -853,7 +859,7 @@ Placement operator new执行以下两项操作。&lt;/p&gt;
 &lt;p&gt;以下讨论基于当前的类中没有定义copy constructor
 &lt;strong&gt;Bitwise Copy Semantics&lt;/strong&gt;
 如下面的class，在进行对象拷贝时，可以使用memove对其按位进行拷贝，即使生成默认的拷贝构造函数也是做相同的事情，在这种情况下，可以认为这个类是具有Bitwise Copy Semantics。&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;class Word {
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;class Word {
 public:
     Word(const char*);
     ~Word() { delete [] str; }
@@ -863,6 +869,7 @@ private:
     char *str;
 };
 &lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
 
 &lt;p&gt;&lt;strong&gt;那什么时候Class不会具有Bitwise Copy Semantics?&lt;/strong&gt;&lt;/p&gt;
 &lt;ul&gt;
@@ -884,13 +891,14 @@ private:
 
 &lt;p&gt;关于书中Copy Constructor(既可以是用户定义的，也可以是由编译器合成)会将NRV功能开启，网上说与copy constructor无关，但是这里存在一个疑问，当NRV优化使用时是不会调用copy constructor的，怎么证明NRV确实与Copy Constructor相关？当类中存在copy constructor时，经验证NRV优化确实已经开启，但是这并不能证明使用copy constructor将NRV优化功能开启。
 可以使用另外一种方式进行验证，假如有一下函数：&lt;/p&gt;
-&lt;pre&gt;&lt;code&gt;A process()
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;A process()
 {
     A a;
     ...
     return a;
 }
 &lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
 
 &lt;p&gt;如果NRV开启，这里的a在此时不会被析构掉，这个可以通过在类A的析构函数中打印内容进行验证，使用GDB来单步执行，会发现不管使不使用copy constructor，在process函数返回时，构造的对象a并没有被析构，说明使用了NRV优化。&lt;/p&gt;
 

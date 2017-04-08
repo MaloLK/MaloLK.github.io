@@ -98,17 +98,19 @@
 多个不同的类拥有名字相同的静态成员，为了防止名称冲突，编译器会使用name-mangling对其名字进行修饰，使其变得独一无二。</p>
 
 <p><strong>对非静态成员的存取</strong>
-对一个非静态成员进行存取，如<code>origin._y = 0.0;</code>，编译器需要将对象的起始地址加上成员的偏移地址算作成员的地址，因此上述的式子可以写成<code>&amp;origin + (&amp;Point3d::_y - 1)</code>，其中的-1是特意为之。指向数据成员的指针总是会被加上1,因此需要减去1获得真正的偏移地址。这样做的原因是为了区分“一个指向第一个数据成员的指针”和“没有指向任何数据成员的指针”。可以看如下示例。</p>
-<pre><code>float Point3d::*p1 = 0; // 没有指向任何数据成员
+对一个非静态成员进行存取，如<code class="highlighter-rouge">origin._y = 0.0;</code>，编译器需要将对象的起始地址加上成员的偏移地址算作成员的地址，因此上述的式子可以写成<code class="highlighter-rouge">&amp;origin + (&amp;Point3d::_y - 1)</code>，其中的-1是特意为之。指向数据成员的指针总是会被加上1,因此需要减去1获得真正的偏移地址。这样做的原因是为了区分“一个指向第一个数据成员的指针”和“没有指向任何数据成员的指针”。可以看如下示例。</p>
+<div class="highlighter-rouge"><pre class="highlight"><code>float Point3d::*p1 = 0; // 没有指向任何数据成员
 float Point3d::*p2 = &amp;Point3d::x; // 指向第一个数据成员，其实是数据成员x在对象中的偏移地址加1，
                                   // 如果不加1，则为0, 无法与上一行中的情况区分。因此在求取数据
                                   // 成员在对象中的偏移地址需要减去1得到真正的偏移地址。
 </code></pre>
+</div>
 <p>使用对象进行直接存取，通过偏移地址的计算，可以在编译器就可以获得数据成员的地址，因此与C中struct数据成员存取在效率上相当。甚至当存在单一继承或者多继承时，要存取的数据成员如果是从基类继承而来，也可以在编译器获得数据成员在当前对象中的偏移地址。</p>
 
 <p>但是如果使用指针进行存取时，就不一定了。考虑如下的情况。</p>
-<pre><code>pt-&gt;x = 0.0;
+<div class="highlighter-rouge"><pre class="highlight"><code>pt-&gt;x = 0.0;
 </code></pre>
+</div>
 <p>如果pt的类型为一个基类，而且继承关系中存在virtual base class，而且现在存取的member是从该virtual base class中继承来的，此时的情况就与上述的使用对象进行存取在效率上会有较大的差异。因为现在不能够确定pt实际所指的对象到底是什么，只有等到执行期才能获得该对象的信息，从而才能够得到数据成员在对象中的偏移地址。而使用对象进行存取可以在编译器直接获得数据成员的地址，因此两种方式在存取效率上就会有较大差异。</p>
 
 <h4 id="继承-与-data-member">“继承” 与 Data Member</h4>
@@ -134,13 +136,14 @@ C++保证出现在derived class中的base class subobject有其完整性，换�
 
 <h4 id="指向data-members-的指针">指向Data Members 的指针</h4>
 <p>指向Data Members的指针实际上就是数据成员在类中的偏移。下面两种获取成员的效果是一样的。</p>
-<pre><code>float Point3d::*p1 = &amp;Point3d::x;
+<div class="highlighter-rouge"><pre class="highlight"><code>float Point3d::*p1 = &amp;Point3d::x;
 Point3d p3d;
 // 直接存取
 cout &lt;&lt; p3d.x &lt;&lt; endl;
 // 使用指向Data Members的指针间接存取，效率较低, 因为要把指向Data Members的指针，在这里是p1，需要将p1额外的减1。
 cout &lt;&lt; point.*p1 &lt;&lt; endl;
 </code></pre>
+</div>
 
         </section>
 
