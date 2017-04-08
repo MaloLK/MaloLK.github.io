@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <title>@malolk - Liu Kai's blog</title>
+    <meta name="description" content="@malolk Liu Kai's blog" />
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="MobileOptimized" content="320" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css" />
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Merriweather:300,700,700italic,300italic|Open+Sans:700,400" />
+    <!-- Customisation  -->
+    <link rel="stylesheet" type="text/css" href="/assets/css/main.css" />
+
+</head>
+<body class="home-template">
+
+    <header class="main-header post-head no-cover">
+    <nav class="main-nav  clearfix">
+        <a class="back-button icon-arrow-left" href="">Home</a>
+        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+    </nav>
+</header>
+
+<main class="content" role="main">
+
+    <article class="post">
+
+        <header class="post-header">
+            <h1 class="post-title">对网络库glue进行测试</h1>
+            <section class="post-meta">
+                <time class="post-date" datetime="2016-09-21">21 Sep 2016</time>
+                
+                    on programming
+                
+            </section>
+        </header>
+
+<!--         <header class="post-header">
+            <a id="blog-logo" href="http://localhost:4000">
+                
+                    <span class="blog-title">@malolk</span>
+                
+            </a>
+        </header> -->
+
+        <!-- <span class="post-meta">
+            <time datetime="2016-09-21">21 Sep 2016</time>
+            
+                on programming
+            
+        </span> -->
+
+        <!-- <h1 class="post-title">对网络库glue进行测试</h1> -->
+
+        <section class="post-content">
+            <h4 id="测试环境">测试环境</h4>
+
+<p><strong>一台4核2.5GHz的笔记本</strong></p>
+
+<h4 id="吞吐量测试">吞吐量测试</h4>
+
+<h5 id="测试方法">测试方法</h5>
+<p>使用glue设计ping-pong server和ping-pong client，由client首先向server发送数据块（16K or 48K），server收到后将其发送回client，而client则将其再发送给server，一直传送直到定时器timeout，统计每个client所收到的的字节数，再除以时间则为吞吐量的值。由于主机为4核，因此server和client各指定2个线程，指定再多线程实际作用的也只有4个线程，而且会增加线程切换的时间。</p>
+
+<h5 id="测试结果">测试结果</h5>
+
+<p><img src="../_images/throughput-performance.bmp" alt="throughput-performance" /></p>
+
+<p>从图中可以看出， 随着并发的clients的数目增加，吞吐量有所下降，可以归结于epoll的内部实现，活动的clients增加会导致epoll_wait返回时需要从内核拷贝到用户态的文件描述符信息增加，同时，在一次循环中需要处理的事件数量增加，因此处理事件时间变长，但是由于用户数增加，所传送数据也会增加，因此整个的吞吐量也不会太低。从图中可以看到，当客户端并发连接数为20000时，ping-pong server也有将近1GiB/s的吞吐量。</p>
+
+<h4 id="事件处理时间测试">事件处理时间测试</h4>
+
+<h5 id="测试方法-1">测试方法</h5>
+<p>所用程序是来自libevent源码中test/bench.cc, 根据glue的实现做了相应修改。程序基本的逻辑链路是，使用一个文件描述符数组，每2个文件描述由socketpair（）产生，且为unix socket。整个程序的触发逻辑是向每个pipe的可写文件描述符发送字符，收到字符的可读端则向下一个pipe的可写端写入，一直这样循环，直到所有文件描述符的被写次数达到预设值才停止。计算此过程的时间则为事件处理时间，通过此时间来反应网络库对事件处理的灵敏度。</p>
+
+<h5 id="测试结果-1">测试结果</h5>
+
+<p><img src="../_images/event-process-100-clients.bmp" alt="event-process-100-clients" /></p>
+
+<p><img src="../_images/event-process-1000-clients.bmp" alt="event-process-1000-clients" /></p>
+
+<p>通过上面两幅图可以看出，glue的事件处理时间在100和1000个clients中均少于libevent处理相应事件所需要的时间。</p>
+
+<h4 id="问题记录">问题记录</h4>
+
+<p>整个网络库都是基于reactor的模式来实现的，因此需要将事件逻辑以回调函数的方式来传递，不可避免的需要使用bind函数来对相应参数进行绑定，bind生成的functor对象内部有一个成员存储相应参数，该成员则以参数来进行构造，相当于是对输入参数进行拷贝，因此对于非指针对象应该以此对象的地址或者引用进行传输，比如glue中的Buffer对象在进行绑定时可以使用std::ref(buf)来进行传输，std::ref(buf) 会生成一个reference_wrapper object, 此object里面将会有一个成员为buf的引用，因此所生成的functor对象内部将会有相应的reference_wrapper object来间接对buf引用。</p>
+
+<p><strong>std::ref(T)的作用</strong> 对于常见的引用（T&amp;），不能被数组或者容器进行存储，而std::ref(T)可以; std::ref(T)内部存在一个<code>operator &amp;T() const noexcept</code>转换函数，因此std::ref(T)又可以被用在任何类型为T&amp;的地方。</p>
+
+        </section>
+
+        
+
+        <footer class="post-footer">
+            <!-- If we want to display author's name and bio -->
+            
+                <figure class="author-image">
+                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <span class="hidden">Liu Kai's Picture</span></a>
+                </figure>
+                <section class="author">
+                    <!-- Author Name -->
+                    <h4> Liu Kai </h4>
+                    <!-- Author Bio -->
+                    <p>
+                        Here goes the author description. You might want to place some links too in here
+                    </p>
+                </section>
+            
+
+            <!-- Share links section -->
+            <section class="share">
+    <h4>Share this post</h4>
+    <a class="icon-twitter" href="http://twitter.com/share?text=对网络库glue进行测试&amp;url=http://malolk.com/2016/09/21/%E5%AF%B9glue%E8%BF%9B%E8%A1%8C%E6%B5%8B%E8%AF%95.html"
+        onclick="window.open(this.href, 'twitter-share', 'width=550,height=235');return false;">
+        <span class="hidden">Twitter</span>
+    </a>
+    <a class="icon-facebook" href="https://www.facebook.com/sharer/sharer.php?u=http://malolk.com/2016/09/21/%E5%AF%B9glue%E8%BF%9B%E8%A1%8C%E6%B5%8B%E8%AF%95.html"
+        onclick="window.open(this.href, 'facebook-share','width=580,height=296');return false;">
+        <span class="hidden">Facebook</span>
+    </a>
+    <a class="icon-google-plus" href="https://plus.google.com/share?url=http://malolk.com/2016/09/21/%E5%AF%B9glue%E8%BF%9B%E8%A1%8C%E6%B5%8B%E8%AF%95.html"
+       onclick="window.open(this.href, 'google-plus-share', 'width=490,height=530');return false;">
+        <span class="hidden">Google+</span>
+    </a>
+</section>
+
+            <!-- Disqus comments -->
+            
+
+        </footer>
+
+    </article>
+
+</main>
+
+    <footer class="site-footer clearfix">
+      <section class="copyright">
+        <a href="">@malolk</a> &copy; 
+               &bull; All rights reserved.
+      </section>
+      <section class="poweredby">Made with Jekyll using 
+        <a href="http://github.com/rosario/kasper">Kasper theme</a>
+      </section>
+    </footer>
+    
+    <script type="text/javascript" src="/assets/js/jquery-1.11.1.min.js"></script>
+    <script type="text/javascript" src="/assets/js/jquery.fitvids.js"></script>
+    <script type="text/javascript" src="/assets/js/index.js"></script>
+
+    <!-- Google Analytics Tracking code -->
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', '']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>   
+</body>
+</html>

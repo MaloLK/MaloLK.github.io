@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <title>@malolk - Liu Kai's blog</title>
+    <meta name="description" content="@malolk Liu Kai's blog" />
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="MobileOptimized" content="320" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css" />
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Merriweather:300,700,700italic,300italic|Open+Sans:700,400" />
+    <!-- Customisation  -->
+    <link rel="stylesheet" type="text/css" href="/assets/css/main.css" />
+
+</head>
+<body class="home-template">
+
+    <header class="main-header post-head no-cover">
+    <nav class="main-nav  clearfix">
+        <a class="back-button icon-arrow-left" href="">Home</a>
+        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+    </nav>
+</header>
+
+<main class="content" role="main">
+
+    <article class="post">
+
+        <header class="post-header">
+            <h1 class="post-title">Memcached守护进程的实现</h1>
+            <section class="post-meta">
+                <time class="post-date" datetime="2017-01-10">10 Jan 2017</time>
+                
+                    on programming
+                
+            </section>
+        </header>
+
+<!--         <header class="post-header">
+            <a id="blog-logo" href="http://localhost:4000">
+                
+                    <span class="blog-title">@malolk</span>
+                
+            </a>
+        </header> -->
+
+        <!-- <span class="post-meta">
+            <time datetime="2017-01-10">10 Jan 2017</time>
+            
+                on programming
+            
+        </span> -->
+
+        <!-- <h1 class="post-title">Memcached守护进程的实现</h1> -->
+
+        <section class="post-content">
+            <h4 id="memcachd守护进程的实现">memcachd守护进程的实现</h4>
+<p>为了摆脱控制终端对进程的影响，一般都是将进程变为守护进程。</p>
+
+<p>使用fork产生子进程，父进程使用_exit()退出，使用_exit()而不是exit是因为exit会进行额外的操作，比如反向执行使用<code>atexit</code>注册的函数，在linux中还会对标准输出和文件流进行flush操作。此时<strong>父进程先于子进程结束</strong>, 子进程将会变为孤儿进程，孤儿进程一般会将init进程作为父进程，与僵尸进程的区别是，<strong>子进程先于父进程结束</strong>，当子进程已经结束后，父进程没有使用wait等函数来获取终止子进程的信息以及清理子进程占用的资源（如回收进程列表信息）。</p>
+
+<p>接下来在子进程中调用setsid使得子进程在新的会话(session)中运行。这里需要回顾一下进程组和会话的概念。</p>
+<blockquote>
+  <p>进程组：一个或多个进程的集合。拥有唯一的标识进程组 ID，每个进程组都有一个组长进程，该进程的进程号等于其进程组的 ID。<strong>进程组 ID 不会因组长进程退出而受到影响</strong>，fork 调用也不会改变进程组 ID。
+会话：一个或多个进程组的集合。新建会话时，当前进程（会话中唯一的进程）成为会话首进程，也是当前进程组的组长进程，其进程号为会话 ID，同样也是该进程组的 ID。它通常是登录 shell，也可以是调用 setsid 新建会话的孤儿进程。对setsid的限制是不能由组长进程来调用setsid。
+因此使用setsid后，子进程将会脱离原会话、原进程组的控制以及控制终端的影响。
+值得注意的是，<strong>由于当前子进程已经变成了新的会话的会话首进程，但是仍然可以重新申请打开控制终端，为了防止进程重新打开控制终端，可以再次进行fork并结束当前进程，此时的进程将不再是会话首进程，自然也就不能重新打开控制终端</strong>。在memcached中，使用守护进程的方式有点不一样，在memcached的main函数中，首先将SIGHUP信号屏蔽，然后再调用daemonize函数，但是并没有再次进行fork，这种方式也是可行的。理由如下，首先在调用daemonize函数后此时的进程已经变为会话首进程，但是没有控制终端，如果这个进程打开一个终端设备，这个终端将会成为这个进程的控制终端，为了防止在这种情况下控制终端退出导致进程退出，屏蔽SIGHUP信号是必要的。</p>
+</blockquote>
+
+<p>最后一步是将输入、输出以及错误等描述符重定向到/dev/null设备。重定向使用dup2。</p>
+
+<p>步骤总结如下：</p>
+<ol>
+  <li>fork，父进程退出，子进程保留。</li>
+  <li>子进程使用setsid开启新的会话，并成为会话首进程和组长进程。</li>
+  <li>改变工作目录（可选）。</li>
+  <li>重新设置文件掩码 (可选)。</li>
+  <li>重定向标准输入、标准输出和标准错误到/dev/null。</li>
+</ol>
+
+<pre><code class="language-C">#include &lt;fcntl.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;unistd.h&gt;
+
+#include "memcached.h"
+
+int daemonize(int nochdir, int noclose)
+{
+    int fd;
+
+    switch (fork()) {
+    case -1:
+        return (-1);
+    case 0:
+        // 子进程
+        break;
+    default:
+        // 父进程成功退出让子进程单独运行
+        _exit(EXIT_SUCCESS);
+    }
+
+    // 将程序在新的session中运行，子进程将会成为新的sesion的group leader，但是不能控制终端
+    if (setsid() == -1)
+        return (-1);
+
+    if (nochdir == 0) {
+        // 将当前的工作路径切换到根路径
+        if(chdir("/") != 0) {
+            perror("chdir");
+            return (-1);
+        }
+    }
+
+    // 将stdin, stdout 和 stderr　都导向 /dev/null
+    if (noclose == 0 &amp;&amp; (fd = open("/dev/null", O_RDWR, 0)) != -1) {
+        if(dup2(fd, STDIN_FILENO) &lt; 0) {
+            perror("dup2 stdin");
+            return (-1);
+        }
+        if(dup2(fd, STDOUT_FILENO) &lt; 0) {
+            perror("dup2 stdout");
+            return (-1);
+        }
+        if(dup2(fd, STDERR_FILENO) &lt; 0) {
+            perror("dup2 stderr");
+            return (-1);
+        }
+
+        if (fd &gt; STDERR_FILENO) {
+            // 节省文件描述符
+            if(close(fd) &lt; 0) {
+                perror("close");
+                return (-1);
+            }
+        }
+    }
+    return (0);
+}
+</code></pre>
+
+<h4 id="从linux-shell-中启动守护进程">从Linux shell 中启动守护进程</h4>
+<p>在实际使用中，如何在linux中最快速的将某个进程设置为守护进程？
+使用<code>nohup</code>命令可以帮助我们将进程变为守护进程。如下：</p>
+<pre><code class="language-sh">nohup your-porcess &amp;
+</code></pre>
+<p>当一个会话结束时，会向会话中的每个进程发送SIGHUP信号，这个信号会使得进程退出。因此这里使用nohup的意图就是阻止当前进程接收SIGHUP信号，另一个作用是关闭标准输入，即使这个进程运行在前台也接收不到输入，而标准输出和标准错误都将会被重定向到nohup.out中，这里可以自定义标准输出和标准错误的重定向。加上’&amp;’的作用则是将其变为后台进程。</p>
+
+<h4 id="参考">参考</h4>
+<p><a href="http://www.ruanyifeng.com/blog/2016/02/linux-daemon.html">Linux 守护进程的启动方法</a>
+<a href="http://alfred-sun.github.io/blog/2015/06/18/daemon-implementation/">Linux 守护进程的实现</a></p>
+
+        </section>
+
+        
+
+        <footer class="post-footer">
+            <!-- If we want to display author's name and bio -->
+            
+                <figure class="author-image">
+                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <span class="hidden">Liu Kai's Picture</span></a>
+                </figure>
+                <section class="author">
+                    <!-- Author Name -->
+                    <h4> Liu Kai </h4>
+                    <!-- Author Bio -->
+                    <p>
+                        Here goes the author description. You might want to place some links too in here
+                    </p>
+                </section>
+            
+
+            <!-- Share links section -->
+            <section class="share">
+    <h4>Share this post</h4>
+    <a class="icon-twitter" href="http://twitter.com/share?text=Memcached守护进程的实现&amp;url=http://malolk.com/2017/01/10/Memcached%E4%B8%AD%E7%9A%84%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%AE%9E%E7%8E%B0.html"
+        onclick="window.open(this.href, 'twitter-share', 'width=550,height=235');return false;">
+        <span class="hidden">Twitter</span>
+    </a>
+    <a class="icon-facebook" href="https://www.facebook.com/sharer/sharer.php?u=http://malolk.com/2017/01/10/Memcached%E4%B8%AD%E7%9A%84%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%AE%9E%E7%8E%B0.html"
+        onclick="window.open(this.href, 'facebook-share','width=580,height=296');return false;">
+        <span class="hidden">Facebook</span>
+    </a>
+    <a class="icon-google-plus" href="https://plus.google.com/share?url=http://malolk.com/2017/01/10/Memcached%E4%B8%AD%E7%9A%84%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%AE%9E%E7%8E%B0.html"
+       onclick="window.open(this.href, 'google-plus-share', 'width=490,height=530');return false;">
+        <span class="hidden">Google+</span>
+    </a>
+</section>
+
+            <!-- Disqus comments -->
+            
+
+        </footer>
+
+    </article>
+
+</main>
+
+    <footer class="site-footer clearfix">
+      <section class="copyright">
+        <a href="">@malolk</a> &copy; 
+               &bull; All rights reserved.
+      </section>
+      <section class="poweredby">Made with Jekyll using 
+        <a href="http://github.com/rosario/kasper">Kasper theme</a>
+      </section>
+    </footer>
+    
+    <script type="text/javascript" src="/assets/js/jquery-1.11.1.min.js"></script>
+    <script type="text/javascript" src="/assets/js/jquery.fitvids.js"></script>
+    <script type="text/javascript" src="/assets/js/index.js"></script>
+
+    <!-- Google Analytics Tracking code -->
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', '']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>   
+</body>
+</html>

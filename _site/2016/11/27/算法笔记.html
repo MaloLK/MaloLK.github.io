@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <title>@malolk - Liu Kai's blog</title>
+    <meta name="description" content="@malolk Liu Kai's blog" />
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="MobileOptimized" content="320" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css" />
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Merriweather:300,700,700italic,300italic|Open+Sans:700,400" />
+    <!-- Customisation  -->
+    <link rel="stylesheet" type="text/css" href="/assets/css/main.css" />
+
+</head>
+<body class="home-template">
+
+    <header class="main-header post-head no-cover">
+    <nav class="main-nav  clearfix">
+        <a class="back-button icon-arrow-left" href="">Home</a>
+        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+    </nav>
+</header>
+
+<main class="content" role="main">
+
+    <article class="post">
+
+        <header class="post-header">
+            <h1 class="post-title">算法笔记</h1>
+            <section class="post-meta">
+                <time class="post-date" datetime="2016-11-27">27 Nov 2016</time>
+                
+                    on programming
+                
+            </section>
+        </header>
+
+<!--         <header class="post-header">
+            <a id="blog-logo" href="http://localhost:4000">
+                
+                    <span class="blog-title">@malolk</span>
+                
+            </a>
+        </header> -->
+
+        <!-- <span class="post-meta">
+            <time datetime="2016-11-27">27 Nov 2016</time>
+            
+                on programming
+            
+        </span> -->
+
+        <!-- <h1 class="post-title">算法笔记</h1> -->
+
+        <section class="post-content">
+            <h3 id="排序算法">排序算法</h3>
+
+<h6 id="快排">快排</h6>
+<p>对于快排，思想是很好理解但是实现时很容易出错。qsort比merge sort快的原因是可以在原有空间进行置换操作，而不需额外的空间，而且程序内部处理程序非常紧凑。</p>
+
+<p><strong>算法思路</strong>
+step1 如果数组元素个数为0 或者 1 则直接返回，在递归时可以作为base case;
+step2 从所给数组范围中选择一个数作为pivot元素;
+step3 其他元素和pivot进行对比，如果小于等于则放在S1中，大于等于则放在S2中;
+step4 针对S1和S2分别递归调用上述过程。</p>
+
+<!-- more -->
+<p><strong>如何有效的选取pivot</strong>
+选取pivot的方式对于qsort的效率是非常关键的，如果每次只选择第一个元素作为pivot，那么输入是有序的情况下，快排的复杂度就会变为O(N^2)，但是使用随机的选取就需要使用耗时的随机数生成函数，这样会减慢算法是速度。其中比较有效的方法是，每次选择第一个元素和最后一个元素以及在中间位置的元素，然后将这三个元素进行排序，将处在中间位置的元素作为pivot元素。
+另外为了更加的优化程序的性能，将这个三个元素在数组中的位置置换使得它们成有序状态，假如输入范围为i到j，那么pivot则在(i + j)/2，但是在进行分割的过程中pivot所在位置会改变，因此需要将pivot元素置换到j-1的位置，在partition时则只需从i+1到j-2依次进行置换操作。但是在partition完毕后，i所指的位置指向大于等于pivot的位置，此时应该将pivot元素与现在i所指位置进行置换。</p>
+
+<p><strong>如何处理相等的元素</strong>
+数组中可能存在一些相等的元素，此时在进行partition操作时，如果遇到相等的元素不进行交换，那么考虑数组元素都相等的情况，此时会出现S1中的元素只比S中的元素少一个的情况，此时复杂度为O(N^2), 而在这种情况下使用每次相等时都进行置换，则会发现出现在S1和S2中的元素个数相当，因此其复杂度为O(NlogN)。所以应该选择每次都进行交换。</p>
+
+<p><strong>对于元素个数较小的输入</strong>
+元素个数较小时，使用插入排序相比快排等递归算法更快。因此可以设定一个阈值，比如为10, 当小于阈值使用插入排序，否则使用快排。这样做的另一个好处是不用考虑在只有一两个元素时怎么求得pivot元素。</p>
+
+<p><strong>实现</strong></p>
+<pre><code>    ElementType median3(ElementType a[], int left, int right)
+    {
+        int center = (left + right)/2;
+        
+        // note: sort three elements
+        if( a[left] &gt; a[center]) swap(&amp;a[left], &amp;a[center]);  
+        if( a[left] &gt; a[right]) swap(&amp;a[left], &amp;a[right]);  
+        if( a[center] &gt; a[right]) swap(&amp;a[center], &amp;a[right]);
+
+        // Hide pivot, need to be restore later
+        swap(&amp;a[center], &amp;a[right - 1]);  
+        return a[right - 1];
+    }
+
+    #define CUTOFF 3
+    void qsort(ElementType a[], int left, int right)
+    {
+        int i, j;
+        ElementType pivot;
+        if(left + CUTOFF &lt; right)
+        {
+            pivot = median3(a, left, right);
+            /*
+             * when using this form:
+             * i = left + 1; j = right - 2;
+             * while(1)
+             * {
+             *       while(a[i] &gt; pivot) i++;              
+             *       while(a[j] &lt; pivot) j--;
+             *       ...
+             * }
+             * it won't work when a[i] == a[j] == pivot, 
+             * because it will loop indefinitely */
+            i = left; j = right - 1;
+            while(1)
+            {
+                while(a[++i] &gt; pivot);
+                while(a[--j] &lt; pivot);
+                if(i &lt; j) swap(&amp;a[i], &amp;a[j]);
+                else break;
+            }
+            // note: restore pivot
+            swap(&amp;a[i], &amp;a[right - 1]);
+            qsort(a, left, i - 1);
+            qsort(a, i + 1, right);
+        }
+        else insertionSort(a + left, right - left + 1);
+    }
+    void quickSort(ElementType a[], int n)
+    {
+        qsort(a, 0, n - 1);    
+    }
+</code></pre>
+
+<p><strong>算法复杂度分析</strong>
+假设S1的数组元素个数为i，则S2元素个数为N-i-1，T(N)代表元素个数为N时的时间复杂度。则有<code>T(N) = T(i) + T(N-i-1) + cN</code>。</p>
+<ul>
+  <li>最坏情况是，每次S2中的元素都为零，则有<code>T(N) = T(N-1) + cN</code>，通过递推求解这是一个O(N^2)的时间复杂度。</li>
+  <li>最好情况是，每次S1和S2中的元素个数都相等，则有<code>T(N) = 2T(N/2) + cN</code>，通过递归求解可知时间复杂度为O(NlogN)。</li>
+  <li>平均情况是，假如每次选择的pivot是随机的，那么S1中的元素个数为0～N中的一个数的概率是1/N，假如S1以1/N的概率获得了m个数，则其贡献给S1的时间复杂度为<code>(1/N)*T(m)</code>, 对于S2也有类似的假设。则有<code>T(N) = 2*(1/N)*SUM(T(m)) + cN</code>, 通过求解会发现时间复杂度为O(NlogN)。</li>
+</ul>
+
+<p><strong>快排用于寻找第K大的数（**平均时间复杂度为O(N)**）</strong>
+问题描述：给定一个数组，求取数组中第K大的数。常规的解法是使用排序后返回第K个位置中的元素，时间复杂度为O(NlogN)。使用类似快排的思想可以做到平均时间复杂度为O(N)。
+具体思路：每次选择一个pivot，将数组元素分割为S1和S2，处于S1和S2之间的是pivot元素。设S1中的元素个数为i，pivot元素处于下标为i的位置，是第i+1个元素。当k小于等于i时，要找到元素应该在S1中，对其进行递归式的分割; 当k == i+1时，则此时的pivot元素则为要找的元素，直接返回；当k &gt; i+1时，则应该在S2中查找要找的元素。
+实现与上面的qsort类似，只是在递归调用时进行选择判断只在一边进行递归。平均时间复杂度分析与上面的类似，将公式中的2去掉后就是递归公式，最后发现是一个等差数列，因此是线性的。</p>
+
+
+        </section>
+
+        
+
+        <footer class="post-footer">
+            <!-- If we want to display author's name and bio -->
+            
+                <figure class="author-image">
+                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <span class="hidden">Liu Kai's Picture</span></a>
+                </figure>
+                <section class="author">
+                    <!-- Author Name -->
+                    <h4> Liu Kai </h4>
+                    <!-- Author Bio -->
+                    <p>
+                        Here goes the author description. You might want to place some links too in here
+                    </p>
+                </section>
+            
+
+            <!-- Share links section -->
+            <section class="share">
+    <h4>Share this post</h4>
+    <a class="icon-twitter" href="http://twitter.com/share?text=算法笔记&amp;url=http://malolk.com/2016/11/27/%E7%AE%97%E6%B3%95%E7%AC%94%E8%AE%B0.html"
+        onclick="window.open(this.href, 'twitter-share', 'width=550,height=235');return false;">
+        <span class="hidden">Twitter</span>
+    </a>
+    <a class="icon-facebook" href="https://www.facebook.com/sharer/sharer.php?u=http://malolk.com/2016/11/27/%E7%AE%97%E6%B3%95%E7%AC%94%E8%AE%B0.html"
+        onclick="window.open(this.href, 'facebook-share','width=580,height=296');return false;">
+        <span class="hidden">Facebook</span>
+    </a>
+    <a class="icon-google-plus" href="https://plus.google.com/share?url=http://malolk.com/2016/11/27/%E7%AE%97%E6%B3%95%E7%AC%94%E8%AE%B0.html"
+       onclick="window.open(this.href, 'google-plus-share', 'width=490,height=530');return false;">
+        <span class="hidden">Google+</span>
+    </a>
+</section>
+
+            <!-- Disqus comments -->
+            
+
+        </footer>
+
+    </article>
+
+</main>
+
+    <footer class="site-footer clearfix">
+      <section class="copyright">
+        <a href="">@malolk</a> &copy; 
+               &bull; All rights reserved.
+      </section>
+      <section class="poweredby">Made with Jekyll using 
+        <a href="http://github.com/rosario/kasper">Kasper theme</a>
+      </section>
+    </footer>
+    
+    <script type="text/javascript" src="/assets/js/jquery-1.11.1.min.js"></script>
+    <script type="text/javascript" src="/assets/js/jquery.fitvids.js"></script>
+    <script type="text/javascript" src="/assets/js/index.js"></script>
+
+    <!-- Google Analytics Tracking code -->
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', '']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>   
+</body>
+</html>

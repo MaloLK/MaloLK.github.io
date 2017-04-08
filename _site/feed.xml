@@ -1,0 +1,1002 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title></title>
+    <description>Liu Kai's blog</description>
+    <link>http://localhost:4000/</link>
+    <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml"/>
+    <pubDate>Sat, 08 Apr 2017 16:59:34 +0800</pubDate>
+    <lastBuildDate>Sat, 08 Apr 2017 16:59:34 +0800</lastBuildDate>
+    <generator>Jekyll v3.4.3</generator>
+    
+      <item>
+        <title>Memcached中的线程模型和命令处理流程</title>
+        <description>&lt;h4 id=&quot;线程模型&quot;&gt;线程模型&lt;/h4&gt;
+&lt;p&gt;memcached中的线程模型比较通用，主线程中有一个event_loop专门监听新的连接，如果有新的连接到来则将其派给一个worker线程处理，每个worker线程自己也有一个event_loop，这个loop主要监听是否主线程派了新的连接过来，当前连接可写事件、可读事件和关闭等状态转换。还有一些辅助的线程如slab平衡线程（用来转移各个slab的空闲内存页），lru维护线程（用于促进lru中item的流动）以及lru爬虫线程(将lru中已经过期或者被flushed掉的item删除)，timeout线程（周期性的检查是否有闲置连接并将闲置连接关闭）。&lt;/p&gt;
+
+&lt;h5 id=&quot;worker线程的启动过程&quot;&gt;worker线程的启动过程&lt;/h5&gt;
+&lt;ol&gt;
+  &lt;li&gt;根据要创建的线程个数设置段锁的范围&lt;/li&gt;
+  &lt;li&gt;设置线程结构体&lt;/li&gt;
+  &lt;li&gt;创建线程，线程函数为&lt;code&gt;worker_libevent&lt;/code&gt;，之后主线程调用&lt;code&gt;wait_for_thread_registration&lt;/code&gt;，然后睡眠在&lt;code&gt;init_lock&lt;/code&gt;上等待子线程注册完毕。同时子线程的步骤如下:
+    &lt;ul&gt;
+      &lt;li&gt;&lt;code&gt;worker_libevent&lt;/code&gt;中每一个thread中设置单独的logger，调用&lt;code&gt;register_thread_initialized()&lt;/code&gt;向主线程注册当前线程，然后进入当前线程的event_loop。&lt;/li&gt;
+      &lt;li&gt;&lt;code&gt;register_thread_initialized&lt;/code&gt;的主要工作为增加已经注册的线程个数&lt;code&gt;init_count&lt;/code&gt;，然后通知主线程。如果所有的worker线程已经启动完毕，则主线程会退出&lt;code&gt;wait_for_thread_registration&lt;/code&gt;。&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h5 id=&quot;主线程向worker线程传送新的连接的流程&quot;&gt;主线程向worker线程传送新的连接的流程&lt;/h5&gt;
+&lt;p&gt;源码中维持一个用于存储连接信息结构体的内存池(cqi_free_list)。内存池的管理方式是，主线程负责从内存池中获取结构体，如果没有空闲的结构体则每次分配预定数目的结构体，而worker线程则负责将结构体放回内存池。取出放回的操作都需要锁保护。&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;首先从&lt;code&gt;CQ_ITEM&lt;/code&gt;内存池中分配一个新的item&lt;/li&gt;
+  &lt;li&gt;使用轮转法选择一个worker线程&lt;/li&gt;
+  &lt;li&gt;设置item中的sfd等信息，将其压入到所选的线程的待处理连接队列中&lt;/li&gt;
+  &lt;li&gt;向worker线程中的pipe中写入字符&lt;code&gt;c&lt;/code&gt;代表有新的连接&lt;/li&gt;
+  &lt;li&gt;worker线程中的pipe对应的文件描述符的事件回调函数&lt;code&gt;thread_libevent_process&lt;/code&gt;将会被调用，在pipe中读取到的字符为&lt;code&gt;c&lt;/code&gt;的情况下，则表示有新的连接，从待处理连接中取出一个&lt;code&gt;cq_item&lt;/code&gt;，调用&lt;code&gt;conn_new&lt;/code&gt;根据&lt;code&gt;cq_item&lt;/code&gt;中的信息创建新的连接，接着将&lt;code&gt;cq_item&lt;/code&gt;是放到&lt;code&gt;CQ_ITEM&lt;/code&gt;内存池。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;conn_new&lt;/code&gt;会进行以下操作：&lt;strong&gt;使用连接的文件描述符索引conns指针数组&lt;/strong&gt;，由于连接的文件描述符是唯一的，因此这里访问全局的&lt;code&gt;conns&lt;/code&gt;没有加锁，如果conns中对应的指针为&lt;code&gt;NULL&lt;/code&gt;，则表示这个文件描述符从来都没有被使用过，因此为其分配&lt;code&gt;conn&lt;/code&gt;结构体，接着设置连接的缓冲等信息，另外从&lt;code&gt;dispatch_conn_new&lt;/code&gt;的调用可以看出所有的连接的默认事件是读事件，读事件会在此时注册到相应的&lt;code&gt;event_loop&lt;/code&gt;中。&lt;strong&gt;当连接释放时，conns中对应的连接结构体不会释放，而是被重复利用，只是连接结构体中的指针对应的内存会被释放或归还到相应的内存池&lt;/strong&gt;。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h5 id=&quot;连接管理&quot;&gt;连接管理&lt;/h5&gt;
+
+&lt;h6 id=&quot;连接的事件处理event_handler&quot;&gt;连接的事件处理&lt;code&gt;event_handler&lt;/code&gt;&lt;/h6&gt;
+&lt;p&gt;这个函数会在&lt;code&gt;conn_new&lt;/code&gt;中作为连接的事件回调函数，这个函数其中一个重要的作用是调用&lt;code&gt;drive_machine&lt;/code&gt;，该函数根据当前的连接状态，使用不同的处理函数。在&lt;code&gt;dispatch_conn_new&lt;/code&gt;中可以看出所有连接的初始状态是&lt;code&gt;conn_new_cmd&lt;/code&gt;，也就是处于处理命令的状态，因此在连接中有数据到来时，会转到&lt;code&gt;drive_machine&lt;/code&gt;的&lt;code&gt;conn_new_cmd&lt;/code&gt;分支，如果此时的read_buffer还没有接收到完整的命令，则会将状态改变为&lt;code&gt;conn_waiting&lt;/code&gt;等待读取更多的数据。&lt;strong&gt;值得注意的是，为了防止单个连接一次处理太多的请求导致其他的连接“饿死”，源码中会对每个连接每次处理的requests个数进行限制。但是如果当前已经接受完所有的请求数据，那么除非有新的数据到来，底层的网络库将不会再通知应用层。为了解决这个问题，源码中使用了一个技巧，在处理完一定数量的请求后，为连接设置可写事件，这一般是可行的，然后在下次有可写事件时再判断是否有未处理完的请求。注意此时的连接状态仍然为conn_new_cmd，下次有可写事件时，仍然会转到这个分支&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h6 id=&quot;连接中的缓冲处理try_read_network&quot;&gt;连接中的缓冲处理&lt;code&gt;try_read_network&lt;/code&gt;&lt;/h6&gt;
+&lt;p&gt;源码中使用的方式是每次尽可能的将连接中的数据读完（可能使用的epoll 的et模式）。但是需要&lt;strong&gt;防止连接缓存内存消耗过多&lt;/strong&gt;，源码中限制重新分配内存的次数，如果分配的次数超过预订限制则返回。另外在&lt;strong&gt;处理相邻两个请求之间会将连接的缓冲缩小的适当的大小&lt;/strong&gt;。&lt;/p&gt;
+
+&lt;h6 id=&quot;对同时在线的连接数进行限制&quot;&gt;对同时在线的连接数进行限制&lt;/h6&gt;
+&lt;p&gt;源码中在接收新的连接时，会检查当前的连接数，如果连接数超过限制，则会给客户端发送错误消息，并将连接关闭，而不再接受新的连接。&lt;strong&gt;那什么时候才能再次接受新的连接呢？源码中采用的方法是设定一个定时器(10ms)z不断的判断当前是否可以重新接受连接，判断的标准是是否有连接关闭（由&lt;code&gt;conn_close来触发&lt;/code&gt;）&lt;/strong&gt;。&lt;/p&gt;
+
+&lt;h6 id=&quot;处理timeout连接&quot;&gt;处理timeout连接&lt;/h6&gt;
+&lt;p&gt;使用单独的一个线程检测连接数组conns中是否有连接已经过期，如果有则向其连接所属的线程发送通知消息，同时传送相应的socket描述符。worker线程会在&lt;code&gt;thread_libevent_process&lt;/code&gt;中收到通知并关闭闲置连接。&lt;/p&gt;
+
+&lt;h4 id=&quot;命令处理流程&quot;&gt;命令处理流程&lt;/h4&gt;
+&lt;h5 id=&quot;get命令&quot;&gt;Get命令&lt;/h5&gt;
+&lt;p&gt;在memcached中，在处理事件时使用的是状态机，初始状态是读取命令。只有命令处理完毕后才可能会发送数据。接下来说说两个命令get和update的处理流程。
+对于get命令，会经过以下几步。&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;初始状态在conn_new_cmd，当有数据到来时就会进入这个分支，这个分支会根据是否已经接收数据来跳转到下一个状态，如果有数据则开始进行命令解析，否则继续等待读取数据。值得注意的是在conn_new_cmd中对每次单个连接处理请求的个数有一个最大的限制，因为是基于事件机制，可能其他的连接的事件也在等待被处理，如果当前的连接事件处理时间太久则可能会导致其他连接的事件很久才被处理。但是如果当前已经把所有的请求都读取到buffer中，如果没有新的数据到来，底层的libevent是不会通知，这里memcached作者使用了一点小技巧，当出现请求没处理完但是不得不退出时，则会注册可写事件，因为可写事件一般是可行的，只要发送缓冲不满或者对方不关闭连接，应用层在下一次触发写事件时则会跳转到conn_new_cmd,再次说明，memcached处理事件是根据其当前连接的状态而不是事件类型。&lt;/li&gt;
+  &lt;li&gt;命令解析部分在get部分需要额外的内存来存放需要发送的数据，在memcached中使用msghdr链表来存放这些数据，一个msghdr只能存储有限的iov结构体，这里为了省去拷贝的时间，将iov结构体内的指针和长度分别设置为返回item的数据地址和长度，另外值得注意的地方是，memcached中可能随时删除这些待返回的item，而iov结构体只是使用指针和地址来标记要发送的数据并没进行拷贝，因此为了防止将待发送的item删除，memcached中对每个使用的item加了引用，并将其加入到链表ilist，这个链表的作用是在将数据发送完毕后及时的将这些item进行解引用。另外，还有一个注意的地方，每次请求都会或多或少的将每个连接的读缓冲或者msglist、ilist等扩大，因此在处理每个命令之间会将这些缓冲的大小缩小到初始大小。&lt;/li&gt;
+  &lt;li&gt;在将命令解析完毕并将返回数据在缓冲中标记后，会将状态设置为conn_mwrite。在conn_mwrite这个分支中，主要完成两个工作，第一步是将缓冲中标记的数据发送出去，这一步完成后则会释放缓冲以及对相关item的引用。然后又回到conn_new_cmd的状态。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h5 id=&quot;update命令&quot;&gt;Update命令&lt;/h5&gt;
+&lt;p&gt;对于update命令来说，这一类命令其实包含set/add／replace/prepend/append等命令的实现，根据具体命令有一些不同的处理。主要有以下几步。&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;第一步跟get命令的第一步处理一样。&lt;/li&gt;
+  &lt;li&gt;由于这类命令的格式是分两行输入，memcahced则是每次都只处理一行。这类命令的第一行只能知道命令的具体类型，key，flags，key的过期时间和value部分的长度。在这一步中主要是根据这些信息分配一个item。接下来会将状态设置为conn_nread。&lt;/li&gt;
+  &lt;li&gt;conn_nread这个分支分为两步，第一步为不断地读取数据直到value部分的数据已经读完；读完value后则会调用complete_nread将value部分的数据存储在上一步中分配的item中。然后会设置状态为conn_write将命令执行的状态返回，执行完会转移到conn_new_cmd处理新的命令。&lt;/li&gt;
+&lt;/ol&gt;
+</description>
+        <pubDate>Sun, 15 Jan 2017 00:42:00 +0800</pubDate>
+        <link>http://localhost:4000/2017/01/15/Memcached%E4%B8%AD%E7%9A%84%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%8F%8A%E5%91%BD%E4%BB%A4%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2017/01/15/Memcached%E4%B8%AD%E7%9A%84%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%8F%8A%E5%91%BD%E4%BB%A4%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.html</guid>
+        
+        <category>memcached</category>
+        
+        <category>event-based</category>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+      <item>
+        <title>Memcached中的LRU和Hashtable</title>
+        <description>&lt;h4 id=&quot;lru-的组成&quot;&gt;LRU 的组成&lt;/h4&gt;
+&lt;p&gt;在最新的实现中，每个slabclass对应四个lru：HOT_LRU, WARM_LRU, COLD_LRU, NOEXP_LRU，管理LRU链表指针的数组的大小为256，而slabclass数组的大小为64，刚好是4倍的关系。，其中最新鲜的是HOT_LRU，如果处于活动的items在HOT_LRU或者WARM_LRU中，则不需移动，只有在处于COLD_LRU时才会将其移动到WARM_LRU中。另外，HOT_LRU和WARM_LRU中的items所占的内存的最大值为当前slabclass的32%。&lt;/p&gt;
+
+&lt;h5 id=&quot;memcached-中的延迟删除&quot;&gt;memcached 中的延迟删除&lt;/h5&gt;
+&lt;p&gt;实现flush_all的最直接的方式是一次将所有的items删除，但是这样花费的时间很长。memcached中使用延迟删除的方式，将当前执行flush_all命令的时间设置为oldest_live，在下次调用get等操作读取item时如果item最近一次访问的时间在oldest_live之前说明这个item已经被惰性删除了，因此不返回这个item而是将其删除。&lt;/p&gt;
+
+&lt;h5 id=&quot;从-lru-中分配一个-item&quot;&gt;从 LRU 中分配一个 item&lt;/h5&gt;
+&lt;p&gt;首先试着从cold_lru中回收过期的item, 然后从相应的slabclass中分配一个item，如果分配失败说明slabclass中已经没有空闲的item，在这种情况下再检查hot_lru和warm_lru中的item所占内存是否超过限制，如果超过限制则会将item移动到cold_lru，否则说明hot_lru和warm_lru中的item个数太少，如果item处于活跃状态则更新其在lru链表中的新鲜度。如果hot_lru和warm_lru中的item个数太少当前的item又不活跃则将其删除，这个过程不一定能够删除item，因此最后一次强制从cold_lru中删除item。如果经过上述的过程仍然不能够分配可用的item，系统则会认为是&lt;code&gt;Out of memory&lt;/code&gt;。
+接下值得注意的是，新分配的item所属的id（slabs_clsid, 这个名字起得比较混乱容易误解）不再仅仅是所属slabclass的id,而是所属lru的id。&lt;/p&gt;
+
+&lt;h5 id=&quot;item-在-lru-中的操作&quot;&gt;item 在 LRU 中的操作&lt;/h5&gt;
+&lt;ol&gt;
+  &lt;li&gt;&lt;code&gt;do_item_update&lt;/code&gt;: 在更新item的访问时间和在lru中的位置时会首先检查当前时间距离item的最近访问时间是否已经超过了预定的期限，如果是则更新。这样做的目的是防止频繁的更新操作耗费太多的时间，过多的get命令将会导致过多的更新操作，如果每次都更新（即使间隔时间很短），将会导致get请求变慢。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;do_item_get&lt;/code&gt;（使用延迟删除的策略）: 首先在hashtable中查找这个item，如果找到则检查这个item是否已经被flush命令给“惰性删除了”，如果是则将其从hashtable和lru链表中删除，结束返回。如果没有被flushed掉则检查其是否已经过期，如果过期则将其从hashtable和lru链表中删除，结束返回。否则，将item置为&lt;code&gt;ITEM_FETECHED｜ITEM_ACTIVE&lt;/code&gt;状态。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;do_item_touch&lt;/code&gt;：这个操作调用上面的get操作，然后只是修改其过期时间。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h5 id=&quot;维护-lru-的线程&quot;&gt;维护 LRU 的线程&lt;/h5&gt;
+&lt;ol&gt;
+  &lt;li&gt;&lt;code&gt;lru_maintainer_junngle&lt;/code&gt;:　每调用一次则会检查当前的slabclass中所含的空闲的items是否太多，如果所有的空闲的items组成的内存超过2.5个page则认为空闲item太多，则将其中的一个slab转移到&lt;code&gt;global-page-pool&lt;/code&gt;中。另外循环1000次，每次检查hot_lru和warm_lru中的item是否太多，如果太多则将其转移到cold_lru,如果cold_lru中的items太多，则将其删除归还给slab-class。这个函数的作用是不断的监测hot_lru和warm_lru的大小，如果过大则将多余的item转移到cold-lru中，检测cold-lru中的item是否处于活跃状态，如果处于活跃状态则将其转移到warm_lru中，否则将其删除。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;lru_maintainer_thread&lt;/code&gt;: 主要的工作分为两个部分，第一部分为调用&lt;code&gt;lru_maintainer_junngle&lt;/code&gt;控制lru中的item个数；另外一个作用调用&lt;code&gt;lru_maintainer_crawler_check&lt;/code&gt;检查每个slab-class中的lru是否需要进行爬虫操作，如果是则将需要进行爬虫的slab-class的id等信息传递给&lt;code&gt;lru_crawler_start&lt;/code&gt;用来启动爬虫功能。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;lru_crawler_start&lt;/code&gt;：为需要进行爬虫操作的slab-class的每个lru链表后插入用于爬虫的item,　这个爬虫item的主要目的是记录当前在lru链表中的位置，并检查item是否已经过期或者已经被flushed，如果是则将其删除，这就是所谓的惰性删除。函数的最后是唤醒用于爬虫的线程&lt;code&gt;item_crawler_thread&lt;/code&gt;。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;item_crawler_thread&lt;/code&gt;: 对所有需要进行爬虫的lru依次进行爬虫，每次检查当前lru中的一个item，接着检查下一个lru。但是为了防止爬虫时间过长影响正常的处理，每处理一个item，则将相关的锁释放，源码中会每处理&lt;code&gt;crawls_persleep&lt;/code&gt;个item就进入睡眠。当所有的lru都处理完毕，则爬虫线程将会进入睡眠，等待&lt;code&gt;lru_maintainer_thread&lt;/code&gt;线程将其唤醒。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;hashtable&quot;&gt;Hashtable&lt;/h4&gt;
+&lt;p&gt;hash表由一个指针数组构成，其中数组中的每个指针元素是一个链表。数组的大小是2的幂次，在初始化时需要指定数组的幂次。通过幂次分配指针数组。&lt;/p&gt;
+
+&lt;h5 id=&quot;hashtable-的扩展&quot;&gt;hashtable 的扩展&lt;/h5&gt;
+&lt;p&gt;memchached中要求hashtable中的元素的个数不能超过数组的大小的1.5倍，如果超过则需要扩展。扩展的任务由一个单独的线程来完成（&lt;code&gt;assoc_maintenance_thread&lt;/code&gt;）。这个线程主要的工作流程如下：&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;在初始阶段不需要扩展hashtable，此时该线程将会睡眠在条件变量&lt;code&gt;maintenance_cond&lt;/code&gt;上。&lt;/li&gt;
+  &lt;li&gt;当其他的worker线程在不断的向hashtable插入元素时，元素个数超过hashtable的大小的1.5倍，此时会调用&lt;code&gt;assoc_start_expand&lt;/code&gt;将&lt;code&gt;assoc_maintenance_thread&lt;/code&gt;唤醒&lt;/li&gt;
+  &lt;li&gt;此时hashtable维护线程会将所有的其他线程给阻塞，然后调用&lt;code&gt;assoc_expand&lt;/code&gt;将当前的&lt;code&gt;primary_hashtable&lt;/code&gt;赋给&lt;code&gt;old_hashtable&lt;/code&gt;，并为&lt;code&gt;primary_hashtable&lt;/code&gt;设置新的指针数组。接着解除其他线程的阻塞。&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;扩展过程每次只会转移少数几个桶，这样做也是为了防止迁移时间过长&lt;/strong&gt;。&lt;/li&gt;
+  &lt;li&gt;当迁移完毕时，hashtable维护线程则会重新进入睡眠状态。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h5 id=&quot;hashtable-迁移过程中的查找插入和删除&quot;&gt;Hashtable 迁移过程中的查找，插入和删除&lt;/h5&gt;
+&lt;ul&gt;
+  &lt;li&gt;插入操作：首先检查是否正在扩展hashtable，且所找key对应的bucket仍然在&lt;code&gt;old_hashtable&lt;/code&gt;中，如果是则将其插入到&lt;code&gt;old_hashtable&lt;/code&gt;中。&lt;strong&gt;优先插入到&lt;code&gt;old_hashtable&lt;/code&gt;中的原因是利于查找&lt;/strong&gt;，如果优先插入到&lt;code&gt;primary_hashtable&lt;/code&gt;中，则需要检查两个hashtable。&lt;/li&gt;
+  &lt;li&gt;查找和删除：也是先检查是否正在扩展hashtable，如果是则查看是否在&lt;code&gt;old_hashtable&lt;/code&gt;中，否则再查看&lt;code&gt;primary_hashtable&lt;/code&gt;。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h5 id=&quot;hashtable-中的锁机制&quot;&gt;Hashtable 中的锁机制&lt;/h5&gt;
+&lt;p&gt;由上述可以知道，当hashtable开始进行扩展时，它会将所有其他会操作hashtable的线程暂停，此时将不会有不安全的操作发生。当将&lt;code&gt;primary_hashtable&lt;/code&gt;和&lt;code&gt;old_hashtable&lt;/code&gt;切换完毕后，对hashtable的访问将会自动判别item在哪个hashtable中。值得说的是，对hashtable的并发访问使用的是段锁，所谓段锁就是hashtable中的多个bucket的并发访问由一个锁访问。这里需要注意的是在进行迁移过程中，迁移线程转移一个bucket时是使用的是这个bucket的序号作为hash_value来获得段锁：&lt;code&gt;item_lock = item_trylock(expand_bucket)&lt;/code&gt;。由于有可能当前的bucket中有其他的worker线程正在访问里面的item，所以需要迁移bucket时需要加锁，但是这里用的是桶的序号(expand_bucket)来获得锁，那么这个锁和使用桶内的item获得的锁是同一个锁吗？答案是：是的。原因是这样的：在item_get函数中使用的是item中key的hash值来获得锁，在源码中的设计是这样的，桶的个数是N个，段锁的个数是M个，且保证M小于N，由于item选择桶是根据取其hash值低N位，即&lt;code&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; N - 1)&lt;/code&gt;，因此当使用bucket序号获取锁时相当于是&lt;code&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; N - 1) &amp;amp; (1 &amp;lt;&amp;lt; M - 1)&lt;/code&gt;，由于N &amp;gt; M,因此可以简化为&lt;code&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; M - 1)&lt;/code&gt;,　跟使用item_get获取锁的方式是一样的，所以如果在迁移过程中，使用bucket序号获得对应的锁后，该bucket中的item将因暂时无法获得锁而阻塞，从而保证hashtable扩展的线程安全。&lt;/p&gt;
+</description>
+        <pubDate>Fri, 13 Jan 2017 00:42:00 +0800</pubDate>
+        <link>http://localhost:4000/2017/01/13/Memcached%E4%B8%AD%E7%9A%84LRU%E5%92%8CHashtable.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2017/01/13/Memcached%E4%B8%AD%E7%9A%84LRU%E5%92%8CHashtable.html</guid>
+        
+        <category>memcached</category>
+        
+        <category>LRU</category>
+        
+        <category>hashtable</category>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+      <item>
+        <title>Memcached中的slabs和CAS(Compare-And-Set)</title>
+        <description>&lt;h4 id=&quot;slabs-的结构&quot;&gt;slabs 的结构&lt;/h4&gt;
+&lt;p&gt;memcached中将slab分为多类，分类的标准是slab中的基本块item的大小，相邻的slabclass中的item大小关系有一个固定的系数(1.25)决定。这些slab类以一个数组进行存储，其中每个元素是一个&lt;code&gt;slabclass_t&lt;/code&gt;指针。每个slabclass中含有多个相同类型的slab, 每个slab实际上是一个page(大小为1M)，然后这个page按照item的大小被分为多个item，这些空闲的item由slots链表进行管理。&lt;/p&gt;
+
+&lt;h4 id=&quot;slabs-的初始化过程&quot;&gt;slabs 的初始化过程&lt;/h4&gt;
+&lt;ol&gt;
+  &lt;li&gt;如果程序要求预先分配内存，则会将所要求的内存预先分配出来。&lt;/li&gt;
+  &lt;li&gt;为每一个slabclass计算item的大小，并保证item大小是内存nbytes对齐。&lt;/li&gt;
+  &lt;li&gt;如果要求预先分配，则为每一个slabclass分配一个slab(即1M)的内存，并根据每个slabclass中item的大小将其分割为items，由slots管理。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;分配-slab-的过程&quot;&gt;分配 slab 的过程&lt;/h4&gt;
+&lt;ol&gt;
+  &lt;li&gt;扩展相应slabclass的slab指针链表&lt;/li&gt;
+  &lt;li&gt;试图从全局的空闲pages中分配，如果没有，则会从已经分配的页面中获取（这是预分配的情况）或者直接从系统中分配内存。&lt;/li&gt;
+  &lt;li&gt;将分配的页按照item的大小（item结构体的大小加上数据部分的大小）把slab分割为空闲的item，交由slots管理。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;从-slabclass-中分配-item&quot;&gt;从 slabclass 中分配 item&lt;/h4&gt;
+&lt;ol&gt;
+  &lt;li&gt;如果当前的slots链表中没有空闲的item，则重新分配slab。&lt;/li&gt;
+  &lt;li&gt;从slots中取出一个item，增加其引用计数返回。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;将-item-归还给-slabclass&quot;&gt;将 item 归还给 slabclass&lt;/h4&gt;
+&lt;ol&gt;
+  &lt;li&gt;将item的flag设置为&lt;code&gt;ITEM_SLABBED&lt;/code&gt;，表示其没有被取走&lt;/li&gt;
+  &lt;li&gt;将item中所属的class设置为０&lt;/li&gt;
+  &lt;li&gt;将item加入到空闲item链表slots中&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;slab-的-rebalance-过程&quot;&gt;slab 的 rebalance 过程&lt;/h4&gt;
+&lt;p&gt;在实际应用过程中，有的slab-class 使用的比其他的slab-class多，使用的较少的slab-class所占用的内存将会浪费内存，即使有爬虫线程在不断的删除过期的item，但是这些回收的item是否归还给当前的slab-class，所以需要额外的平衡线程将用的少的slab-class的内存页传送到用的比较多的slab-class中。&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;&lt;code&gt;slab_rebalance_start&lt;/code&gt;: 这个函数的功能主要的作用是选取需要转出内存页的slab-class的内存页，源码中选取的是slab-class中的第一个内存页，因为第一个内存页中的items最先分配出去，其中的items存在的时间一般较大。确定这个内存页的起始位置和终止位置。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;slab_rebalance_alloc&lt;/code&gt;: 这个函数的主要作用是从指定的slab-class中分配一个item，如果这个item处于被转移的内存页中，则将其引用置为0,　接着分配下一个item。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;slabs_reassign&lt;/code&gt;: 这个函数的作用是设置需要进行内存页转移的源和目的slab-class，并唤醒rebalance线程进行内存页转移操作。这个函数主要由LRU维护线程在调用&lt;code&gt;lru_maintainer_junngle&lt;/code&gt;时调用，当然前提是开启auto_move功能。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;slab_rebalance_thread&lt;/code&gt;: 这是rebalance线程，首先调用&lt;code&gt;slab_rebalance_start&lt;/code&gt;确定要转移的源slab-class中的slab。然后调用&lt;code&gt;slab_rebalance_move&lt;/code&gt;将要转移的slab中的item全部回收。最后如果回收完毕，则会调用&lt;code&gt;slab_rebalance_finish&lt;/code&gt;将slab从源slab-class转移到目的slab-class中。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;item-中的-cascompare-and-set的作用&quot;&gt;item 中的 CAS（Compare-And-Set）的作用&lt;/h4&gt;
+&lt;p&gt;CAS(Compare-And-Set)通常在以下情况使用：多个并发请求以原子的方式更新memcahced中的某个key。
+假设现在有两个并发请求A和B，两个请求都希望去增加memcache中的counter，可能的更新顺序如下：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;A: counter = memcache.get(key) # Reads 42
+B: counter = memcache.get(key) # Reads 42
+A: memcache.set(key, counter+1) # Writes 43
+B: memcache.set(key, counter+1) # Writes 43
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;如上所示，并没有将counter增加2。另外使用每次修改后再读取检查是否修改的方法也不可行，使用额外的锁也可能因为网络原因导致死锁。使用CAS可以解决这个问题：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;client = memcache.Client();
+while (true) {
+  counter = client.gets(key);
+  if (client.cas(key, counter+1)) {
+    break;
+  }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;每次client更新数据时，首先使用gets获得相应的key, key里包含当前value的一个版本（或者是timestamp），每次key对应的value被更新，key中的版本则会更新。因此当client更新value时需要提交上次读取的key，如果memchach检测到提供的key和server中的key不相同时，说明期间value已经被其他客户端更新，此时则会返回false，不做任何更新。客户端接收到false结果后则会继续尝试，当然实际实现中需要限制尝试的次数，因为有可能系统接受的请求太多，导致某些客户的请求一直无法满足。回到上面A和B两个并发请求的执行顺序，如果使用cas，那么第一次只有请求A会执行成功，而请求B的cas操作将会返回false，请求B再尝试一次则会成功。当然要达到上述的效果，必须要求在memcache中针对某个key的cas是串行操作，而不是并行操作。
+Ref: http://neopythonic.blogspot.com/2011/08/compare-and-set-in-memcache.html&lt;/p&gt;
+</description>
+        <pubDate>Thu, 12 Jan 2017 00:42:00 +0800</pubDate>
+        <link>http://localhost:4000/2017/01/12/Memcached%E4%B8%AD%E7%9A%84slabs%E5%92%8Ccas%E7%9A%84%E4%BD%9C%E7%94%A8.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2017/01/12/Memcached%E4%B8%AD%E7%9A%84slabs%E5%92%8Ccas%E7%9A%84%E4%BD%9C%E7%94%A8.html</guid>
+        
+        <category>memcached</category>
+        
+        <category>memory</category>
+        
+        <category>CAS</category>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+      <item>
+        <title>Memcached守护进程的实现</title>
+        <description>&lt;h4 id=&quot;memcachd守护进程的实现&quot;&gt;memcachd守护进程的实现&lt;/h4&gt;
+&lt;p&gt;为了摆脱控制终端对进程的影响，一般都是将进程变为守护进程。&lt;/p&gt;
+
+&lt;p&gt;使用fork产生子进程，父进程使用_exit()退出，使用_exit()而不是exit是因为exit会进行额外的操作，比如反向执行使用&lt;code&gt;atexit&lt;/code&gt;注册的函数，在linux中还会对标准输出和文件流进行flush操作。此时&lt;strong&gt;父进程先于子进程结束&lt;/strong&gt;, 子进程将会变为孤儿进程，孤儿进程一般会将init进程作为父进程，与僵尸进程的区别是，&lt;strong&gt;子进程先于父进程结束&lt;/strong&gt;，当子进程已经结束后，父进程没有使用wait等函数来获取终止子进程的信息以及清理子进程占用的资源（如回收进程列表信息）。&lt;/p&gt;
+
+&lt;p&gt;接下来在子进程中调用setsid使得子进程在新的会话(session)中运行。这里需要回顾一下进程组和会话的概念。&lt;/p&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;进程组：一个或多个进程的集合。拥有唯一的标识进程组 ID，每个进程组都有一个组长进程，该进程的进程号等于其进程组的 ID。&lt;strong&gt;进程组 ID 不会因组长进程退出而受到影响&lt;/strong&gt;，fork 调用也不会改变进程组 ID。
+会话：一个或多个进程组的集合。新建会话时，当前进程（会话中唯一的进程）成为会话首进程，也是当前进程组的组长进程，其进程号为会话 ID，同样也是该进程组的 ID。它通常是登录 shell，也可以是调用 setsid 新建会话的孤儿进程。对setsid的限制是不能由组长进程来调用setsid。
+因此使用setsid后，子进程将会脱离原会话、原进程组的控制以及控制终端的影响。
+值得注意的是，&lt;strong&gt;由于当前子进程已经变成了新的会话的会话首进程，但是仍然可以重新申请打开控制终端，为了防止进程重新打开控制终端，可以再次进行fork并结束当前进程，此时的进程将不再是会话首进程，自然也就不能重新打开控制终端&lt;/strong&gt;。在memcached中，使用守护进程的方式有点不一样，在memcached的main函数中，首先将SIGHUP信号屏蔽，然后再调用daemonize函数，但是并没有再次进行fork，这种方式也是可行的。理由如下，首先在调用daemonize函数后此时的进程已经变为会话首进程，但是没有控制终端，如果这个进程打开一个终端设备，这个终端将会成为这个进程的控制终端，为了防止在这种情况下控制终端退出导致进程退出，屏蔽SIGHUP信号是必要的。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;最后一步是将输入、输出以及错误等描述符重定向到/dev/null设备。重定向使用dup2。&lt;/p&gt;
+
+&lt;p&gt;步骤总结如下：&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;fork，父进程退出，子进程保留。&lt;/li&gt;
+  &lt;li&gt;子进程使用setsid开启新的会话，并成为会话首进程和组长进程。&lt;/li&gt;
+  &lt;li&gt;改变工作目录（可选）。&lt;/li&gt;
+  &lt;li&gt;重新设置文件掩码 (可选)。&lt;/li&gt;
+  &lt;li&gt;重定向标准输入、标准输出和标准错误到/dev/null。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-C&quot;&gt;#include &amp;lt;fcntl.h&amp;gt;
+#include &amp;lt;stdio.h&amp;gt;
+#include &amp;lt;stdlib.h&amp;gt;
+#include &amp;lt;unistd.h&amp;gt;
+
+#include &quot;memcached.h&quot;
+
+int daemonize(int nochdir, int noclose)
+{
+    int fd;
+
+    switch (fork()) {
+    case -1:
+        return (-1);
+    case 0:
+        // 子进程
+        break;
+    default:
+        // 父进程成功退出让子进程单独运行
+        _exit(EXIT_SUCCESS);
+    }
+
+    // 将程序在新的session中运行，子进程将会成为新的sesion的group leader，但是不能控制终端
+    if (setsid() == -1)
+        return (-1);
+
+    if (nochdir == 0) {
+        // 将当前的工作路径切换到根路径
+        if(chdir(&quot;/&quot;) != 0) {
+            perror(&quot;chdir&quot;);
+            return (-1);
+        }
+    }
+
+    // 将stdin, stdout 和 stderr　都导向 /dev/null
+    if (noclose == 0 &amp;amp;&amp;amp; (fd = open(&quot;/dev/null&quot;, O_RDWR, 0)) != -1) {
+        if(dup2(fd, STDIN_FILENO) &amp;lt; 0) {
+            perror(&quot;dup2 stdin&quot;);
+            return (-1);
+        }
+        if(dup2(fd, STDOUT_FILENO) &amp;lt; 0) {
+            perror(&quot;dup2 stdout&quot;);
+            return (-1);
+        }
+        if(dup2(fd, STDERR_FILENO) &amp;lt; 0) {
+            perror(&quot;dup2 stderr&quot;);
+            return (-1);
+        }
+
+        if (fd &amp;gt; STDERR_FILENO) {
+            // 节省文件描述符
+            if(close(fd) &amp;lt; 0) {
+                perror(&quot;close&quot;);
+                return (-1);
+            }
+        }
+    }
+    return (0);
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4 id=&quot;从linux-shell-中启动守护进程&quot;&gt;从Linux shell 中启动守护进程&lt;/h4&gt;
+&lt;p&gt;在实际使用中，如何在linux中最快速的将某个进程设置为守护进程？
+使用&lt;code&gt;nohup&lt;/code&gt;命令可以帮助我们将进程变为守护进程。如下：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;nohup your-porcess &amp;amp;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;当一个会话结束时，会向会话中的每个进程发送SIGHUP信号，这个信号会使得进程退出。因此这里使用nohup的意图就是阻止当前进程接收SIGHUP信号，另一个作用是关闭标准输入，即使这个进程运行在前台也接收不到输入，而标准输出和标准错误都将会被重定向到nohup.out中，这里可以自定义标准输出和标准错误的重定向。加上’&amp;amp;’的作用则是将其变为后台进程。&lt;/p&gt;
+
+&lt;h4 id=&quot;参考&quot;&gt;参考&lt;/h4&gt;
+&lt;p&gt;&lt;a href=&quot;http://www.ruanyifeng.com/blog/2016/02/linux-daemon.html&quot;&gt;Linux 守护进程的启动方法&lt;/a&gt;
+&lt;a href=&quot;http://alfred-sun.github.io/blog/2015/06/18/daemon-implementation/&quot;&gt;Linux 守护进程的实现&lt;/a&gt;&lt;/p&gt;
+</description>
+        <pubDate>Tue, 10 Jan 2017 00:42:00 +0800</pubDate>
+        <link>http://localhost:4000/2017/01/10/Memcached%E4%B8%AD%E7%9A%84%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%AE%9E%E7%8E%B0.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2017/01/10/Memcached%E4%B8%AD%E7%9A%84%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%AE%9E%E7%8E%B0.html</guid>
+        
+        <category>memcached</category>
+        
+        <category>C/C++</category>
+        
+        <category>linux</category>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+      <item>
+        <title>关于linux中socket选项的理解</title>
+        <description>&lt;h4 id=&quot;so_reuseaddr&quot;&gt;SO_REUSEADDR&lt;/h4&gt;
+
+&lt;p&gt;主要有两个作用&lt;a href=&quot;http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t&quot;&gt;戳这&lt;/a&gt;：&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;对&lt;code&gt;wildcard&lt;/code&gt;地址有影响，假如当前的&lt;code&gt;server&lt;/code&gt;绑定的地址是0.0.0.0:21, 如果这个选项没有设置，那么此时同一台主机的另一个&lt;code&gt;server&lt;/code&gt;绑定到特定地址相同端口，比如 192.168.0.1:21，就会发生错误EADDRINUSE。如果选项有设置，则不会出现这个错误。&lt;/li&gt;
+  &lt;li&gt;另外一个作用比较常见，在程序调试或者重新载入新的设置时一般需要立即重启&lt;code&gt;server&lt;/code&gt;，但是之前被关闭的server可能正处于&lt;code&gt;TIME_WAIT&lt;/code&gt;状态，此时如果没有设置这个选项，则会导致EADDRINUSE，因为处于&lt;code&gt;TIME_WAIT&lt;/code&gt;的server仍旧绑定在相同的地址和端口上。因此实际使用时会设置这个选项利于调试。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;so_reuseport&quot;&gt;SO_REUSEPORT&lt;/h4&gt;
+
+&lt;p&gt;这个选项的作用&lt;a href=&quot;http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t&quot;&gt;戳这&lt;/a&gt;是允许多个socket绑定相同的地址和端口，唯一的要求是所有绑定到这个地址和端口的socket都必须设置这个选项。这个功能常见的应用是实现负载均衡。
+但是这个选项并不能完全替代&lt;code&gt;SO_REUSEADDR&lt;/code&gt;，比如serverA绑定到ip:port，然后处于TIME_WAIT状态，此时serverB也绑定到相同的地址，只有两种情况才不会出现EADDRINUSE，一种是serverB设置了&lt;code&gt;SO_REUSEADDR&lt;/code&gt;，另外一种情况是serverA和serverB都设置了&lt;code&gt;SO_REUSEPORT&lt;/code&gt;。&lt;/p&gt;
+
+&lt;h4 id=&quot;socket连接&quot;&gt;socket连接&lt;/h4&gt;
+&lt;ol&gt;
+  &lt;li&gt;设置tcp &lt;code&gt;keep-alive&lt;/code&gt;时刻检查网络连接是否有效，比如当网络断掉时，可能无法完成四次握手导致server无法知道连接是否有效，而&lt;code&gt;keep-alive&lt;/code&gt;会每隔一段实际来检查连接是否仍然有效。&lt;/li&gt;
+  &lt;li&gt;设置 &lt;code&gt;SOL_LINGER&lt;/code&gt; 的作用是改变调用close时系统的操作，默认情况下是进行四次挥手结束连接，可能将发送缓冲区的数据发送给对方。&lt;/li&gt;
+  &lt;li&gt;设置tcp nodelay选项的原因是禁用Nagel’s算法：
+    &lt;blockquote&gt;
+      &lt;p&gt;The algorithm is: if data is smaller than a limit (usually MSS), wait until receiving ACK for previously sent packets and in the mean time accumulate data from user. Then send the accumulated data.&lt;/p&gt;
+    &lt;/blockquote&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+</description>
+        <pubDate>Sun, 18 Dec 2016 00:33:02 +0800</pubDate>
+        <link>http://localhost:4000/2016/12/18/%E5%85%B3%E4%BA%8Elinux%E4%B8%ADSocket%E9%80%89%E9%A1%B9%E7%9A%84%E7%90%86%E8%A7%A3.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2016/12/18/%E5%85%B3%E4%BA%8Elinux%E4%B8%ADSocket%E9%80%89%E9%A1%B9%E7%9A%84%E7%90%86%E8%A7%A3.html</guid>
+        
+        <category>linux</category>
+        
+        <category>network</category>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+      <item>
+        <title>Google的C++编码风格Tips</title>
+        <description>&lt;blockquote&gt;
+  &lt;p&gt;摘抄自&lt;a href=&quot;https://zh-google-styleguide.readthedocs.io/en/latest/google-cpp-styleguide/&quot;&gt;这里&lt;/a&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h4 id=&quot;作用域&quot;&gt;作用域&lt;/h4&gt;
+
+&lt;p&gt;&lt;strong&gt;名字空间&lt;/strong&gt; 鼓励在 .cc 文件内使用匿名名字空间。使用具名的名字空间时，其名称可基于项目名或相对路径。禁止使用 using 指示（using-directive）。禁止使用内联命名空间（inline namespace）。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;非成员函数、静态成员函数和全局函数&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;使用静态成员函数或名字空间内的非成员函数，尽量不要用裸的全局函数。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;局部变量&lt;/strong&gt; 将函数变量尽可能置于最小作用域内，并在变量声明时进行初始化。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;静态和全局变量&lt;/strong&gt; 禁止使用 class 类型的静态或全局变量：它们会导致难以发现的 bug 和不确定的构造和析构函数调用顺序。不过 constexpr 变量除外，毕竟它们又不涉及动态初始化或析构。&lt;/p&gt;
+
+&lt;h4 id=&quot;类&quot;&gt;类&lt;/h4&gt;
+
+&lt;p&gt;&lt;strong&gt;构造函数的职责&lt;/strong&gt; 不要在构造函数中进行复杂的初始化 (尤其是那些有可能失败或者需要调用虚函数的初始化)。 如果对象需要进行有意义的 (non-trivial) 初始化，考虑使用明确的 Init() 方法或使用工厂模式。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;初始化&lt;/strong&gt; 如果类中定义了成员变量，则必须在类中为每个类提供初始化函数或定义一个构造函数。若未声明构造函数，则编译器会生成一个默认的构造函数，这有可能导致某些成员未被初始化或被初始化为不恰当的值。&lt;/p&gt;
+
+&lt;p&gt;在类成员里面进行初始化是指声明一个成员变量的时候使用一个结构例如&lt;code&gt;int _count = 17&lt;/code&gt;或者&lt;code&gt;string _name{&quot;abc&quot;}&lt;/code&gt;来替代&lt;code&gt;int _count&lt;/code&gt;或者&lt;code&gt;string _name&lt;/code&gt;这样的形式。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;显式构造函数&lt;/strong&gt; 对单个参数的构造函数使用&lt;code&gt;C++&lt;/code&gt;关键字&lt;code&gt;explici&lt;/code&gt;。除单参数构造函数外，这一规则也适用于除第一个参数以外的其他参数都具有默认参数的构造函数。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;可拷贝类型和可移动类型&lt;/strong&gt; 如果你的类型需要, 就让它们支持拷贝/移动。否则，就把隐式产生的拷贝和移动函数禁用。
+一般都会将拷贝构造函数给禁掉。如果基类存在拷贝构造函数，那么对于子类来说，如果在实现子类的拷贝构造函数时忘了显示的调用基类的拷贝构造函数，编译器会在我们定义的子类拷贝构造函数中插入调用基类的默认构造函数，而不是基类的对应的拷贝构造函数。&lt;/p&gt;
+
+&lt;p&gt;禁掉拷贝构造函数的方法一般是将拷贝构造函数和赋值函数设置为private，且不予定义。设置为private，是为了不让外界用户调用，不予定义则是为了防止友元函数或者成员函数进行拷贝操作。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;委派和继承构造函数&lt;/strong&gt; 在能够减少重复代码的情况下使用委派和继承构造函数。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;结构体 VS. 类&lt;/strong&gt; 在能够减少重复代码的情况下使用委派和继承构造函数。
+注意: 类和结构体的成员变量使用不同的命名规则。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;继承&lt;/strong&gt; 使用组合常常比使用继承更合理。如果使用继承的话，定义为 public 继承。&lt;/p&gt;
+
+&lt;p&gt;当重载一个虚函数, 在衍生类中把它明确的声明为 virtual。理论依据：如果省略 virtual 关键字，代码阅读者不得不检查所有父类，以判断该函数是否是虚函数。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;多重继承&lt;/strong&gt; 真正需要用到多重实现继承的情况少之又少。只在以下情况我们才允许多重继承：最多只有一个基类是非抽象类；其它基类都是以 Interface 为后缀的纯接口类。&lt;/p&gt;
+
+&lt;p&gt;只有当所有父类除第一个外都是纯接口类时，才允许使用多重继承。为确保它们是纯接口，这些类必须以 Interface 为后缀。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;接口&lt;/strong&gt; 接口是指满足特定条件的类，这些类以 Interface 为后缀 (不强制)。
+当一个类满足以下要求时，称之为纯接口：&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;只有纯虚函数 (“=0”) 和静态函数 (除了下文提到的析构函数)。&lt;/li&gt;
+  &lt;li&gt;没有非静态数据成员。&lt;/li&gt;
+  &lt;li&gt;没有定义任何构造函数. 如果有, 也不能带有参数, 并且必须为 protected。&lt;/li&gt;
+  &lt;li&gt;如果它是一个子类, 也只能从满足上述条件并以 Interface 为后缀的类继承。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;运算符重载&lt;/strong&gt; 除少数特定环境外，不要重载运算符。一般不要重载运算符. 尤其是赋值操作 (operator=) 比较诡异, 应避免重载. 如果需要的话, 可以定义类似 Equals(), CopyFrom() 等函数。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;存取控制&lt;/strong&gt; 将所有数据成员声明为 private, 并根据需要提供相应的存取函数. 例如, 某个名为&lt;code&gt;foo_&lt;/code&gt;的变量, 其取值函数是&lt;code&gt;foo()&lt;/code&gt;. 还可能需要一个赋值函数&lt;code&gt;set_foo()&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;特例是, 静态常量数据成员 (一般写做&lt;code&gt;kFoo&lt;/code&gt;) 不需要是私有成员.&lt;/p&gt;
+
+&lt;p&gt;一般在头文件中把存取函数定义成内联函数.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;声明顺序&lt;/strong&gt; 在类中使用特定的声明顺序:&lt;code&gt;public:&lt;/code&gt;在&lt;code&gt;private:&lt;/code&gt;之前, 成员函数在数据成员 (变量) 前。
+每个区段内的声明通常按以下顺序:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;typedefs 和枚举&lt;/li&gt;
+  &lt;li&gt;常量&lt;/li&gt;
+  &lt;li&gt;构造函数&lt;/li&gt;
+  &lt;li&gt;析构函数&lt;/li&gt;
+  &lt;li&gt;成员函数, 含静态成员函数&lt;/li&gt;
+  &lt;li&gt;数据成员, 含静态数据成员&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;友元声明应该放在 private 区段. 如果用宏&lt;code&gt;DISALLOW_COPY_AND_ASSIGN&lt;/code&gt; 禁用拷贝和赋值, 应当将其置于 private 区段的末尾, 也即整个类声明的末尾. 参见可拷贝类型和可移动类型.&lt;/p&gt;
+
+&lt;p&gt;不要在类定义中内联大型函数. 通常, 只有那些没有特别意义或性能要求高, 并且是比较短小的函数才能被定义为内联函数。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;编写简短函数&lt;/strong&gt; 倾向编写简短, 凝练的函数. 即使一个长函数现在工作的非常好, 一旦有人对其修改, 有可能出现新的问题. 甚至导致难以发现的 bug. 使函数尽量简短, 便于他人阅读和修改代码.&lt;/p&gt;
+
+&lt;h4 id=&quot;来自-google-的奇技&quot;&gt;来自 Google 的奇技&lt;/h4&gt;
+
+&lt;p&gt;使用 cpplint.py 检查风格错误。&lt;/p&gt;
+
+&lt;h4 id=&quot;其他-c-特性&quot;&gt;其他 C++ 特性&lt;/h4&gt;
+
+&lt;p&gt;&lt;strong&gt;引用参数&lt;/strong&gt; 所有按引用传递的参数必须加上 const。（这个算是Google code中的硬性规定）&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;右值引用&lt;/strong&gt; 只在定义移动构造函数与移动赋值操作时使用右值引用. 不要使用 std::forward。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;函数重载&lt;/strong&gt; 若要用好函数重载，最好能让读者一看调用点（call site）就胸有成竹，不用花心思猜测调用的重载函数到底是哪一种。该规则适用于构造函数。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;缺省参数&lt;/strong&gt; 我们不允许使用缺省函数参数，少数极端情况除外。尽可能改用函数重载。
+除了以下情况，我们要求必须显式提供所有参数。
+其一，位于 .cc 文件里的静态函数或匿名空间函数，毕竟都只能在局部文件里调用该函数了。
+其二，可以在构造函数里用缺省参数，毕竟不可能取得它们的地址。
+其三，可以用来模拟变长数组。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;变长数组和 alloca()&lt;/strong&gt; 我们不允许使用变长数组和&lt;code&gt;alloca()&lt;/code&gt;。改用更安全的分配器&lt;code&gt;（allocator）&lt;/code&gt;，就像 &lt;code&gt;std::vector&lt;/code&gt; 或 &lt;code&gt;std::unique_ptr&amp;lt;T[]&amp;gt;&lt;/code&gt;。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;友元&lt;/strong&gt; 我们允许合理的使用友元类及友元函数。
+通常友元应该定义在同一文件内, 避免代码读者跑到其它文件查找使用该私有成员的类. 经常用到友元的一个地方是将 FooBuilder 声明为 Foo 的友元, 以便 FooBuilder 正确构造 Foo 的内部状态, 而无需将该状态暴露出来. 某些情况下, 将一个单元测试类声明成待测类的友元会很方便。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;异常&lt;/strong&gt; 我们不使用 C++ 异常。理由如下。&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;异常会彻底扰乱程序的执行流程并难以判断，函数也许会在您意料不到的地方返回。您或许会加一大堆何时何处处理异常的规定来降低风险，然而开发者的记忆负担更重了。&lt;/li&gt;
+  &lt;li&gt;异常安全需要RAII和不同的编码实践. 要轻松编写出正确的异常安全代码需要大量的支持机制. 更进一步地说, 为了避免读者理解整个调用表, 异常安全必须隔绝从持续状态写到 “提交” 状态的逻辑.&lt;/li&gt;
+  &lt;li&gt;滥用异常会变相鼓励开发者去捕捉不合时宜，或本来就已经没法恢复的「伪异常」。比如，用户的输入不符合格式要求时，也用不着抛异常。如此之类的伪异常列都列不完。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;运行时类型识别&lt;/strong&gt; 我们禁止使用 RTTI.在运行时判断类型通常意味着设计问题. 如果你需要在运行期间确定一个对象的类型, 这通常说明你需要考虑重新设计你的类.随意地使用 RTTI 会使你的代码难以维护. 它使得基于类型的判断树或者 switch 语句散布在代码各处. 如果以后要进行修改, 你就必须检查它们.RTTI 有合理的用途但是容易被滥用, 因此在使用时请务必注意. 在单元测试中可以使用 RTTI, 但是在其他代码中请尽量避免.&lt;/p&gt;
+
+&lt;p&gt;替代方案： 使用虚函数、使用访问者设计模式和使用&lt;code&gt;dynamic_cast&lt;/code&gt;。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;类型转换&lt;/strong&gt; 使用 C++ 的类型转换, 如 &lt;code&gt;static_cast&amp;lt;&amp;gt;()&lt;/code&gt;. 不要使用 &lt;code&gt;int y = (int)x&lt;/code&gt; 或 &lt;code&gt;int y = int(x)&lt;/code&gt; 等转换方式。
+不要使用 C 风格类型转换. 而应该使用 C++ 风格。&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;用 &lt;code&gt;static_cast&lt;/code&gt; 替代 C 风格的值转换, 或某个类指针需要明确的向上转换为父类指针时。&lt;/li&gt;
+  &lt;li&gt;用 &lt;code&gt;const_cast&lt;/code&gt; 去掉 &lt;code&gt;const&lt;/code&gt; 限定符。&lt;/li&gt;
+  &lt;li&gt;用 &lt;code&gt;reinterpret_cast&lt;/code&gt; 指针类型和整型或其它指针之间进行不安全的相互转换. 仅在你对所做一切了然于心时使用.这个操作符能够在非相关的类型之间转换. 操作结果只是简单的从一个指针到别的指针的值的 二进制拷贝. 在类型之间指向的内容不做任何类型的检查和转换。&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;dynamic_cast&lt;/code&gt;用于安全的向下转换，当不能进行安全转换时，对于指针则返回NULL, 对于引用类型则会抛出&lt;code&gt;bad cast exception&lt;/code&gt;。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;流&lt;/strong&gt; 只在记录日志时使用流。不要使用流, 除非是日志接口需要. 使用&lt;code&gt;printf&lt;/code&gt;之类的代替。
+使用流还有很多利弊, 但代码一致性胜过一切. 不要在代码中使用流.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;前置自增和自减&lt;/strong&gt; 对于迭代器和其他模板对象使用前缀形式&lt;code&gt;(++i)&lt;/code&gt;的自增, 自减运算符.
+不考虑返回值的话, 前置自增 (++i) 通常要比后置自增 (i++) 效率更高. 因为后置自增 (或自减) 需要对表达式的值 i 进行一次拷贝.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;const 用法&lt;/strong&gt; 我们强烈建议你在任何可能的情况下都要使用&lt;code&gt;const&lt;/code&gt;. 此外有时改用&lt;code&gt;C++11&lt;/code&gt;推出的 &lt;code&gt;constexpr&lt;/code&gt;更好。
+建议使用const的地方。&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;如果函数不会修改传你入的引用或指针类型参数, 该参数应声明为&lt;code&gt;const&lt;/code&gt;.&lt;/li&gt;
+  &lt;li&gt;尽可能将函数声明为 const. 访问函数应该总是 const. 其他不会修改任何数据成员, 未调用非 const 函数, 不会返回数据成员非 const 指针或引用的函数也应该声明成 const.&lt;/li&gt;
+  &lt;li&gt;如果数据成员在对象构造之后不再发生变化, 可将其定义为 const.&lt;/li&gt;
+  &lt;li&gt;尽可能将函数声明为 const. 访问函数应该总是 const. 其他不会修改任何数据成员, 未调用非 const 函数, 不会返回数据成员非 const 指针或引用的函数也应该声明成 const.&lt;/li&gt;
+  &lt;li&gt;如果数据成员在对象构造之后不再发生变化, 可将其定义为 const.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;constexpr 用法&lt;/strong&gt; 在 C++11 里，用 constexpr 来定义真正的常量，或实现常量初始化。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;整型&lt;/strong&gt; 使用断言来指出变量为非负数, 而不是使用无符号型!&lt;/p&gt;
+
+&lt;p&gt;C++ 内建整型中, 仅使用 int. 如果程序中需要不同大小的变量, 可以使用 &lt;code&gt;&amp;lt;stdint.h&amp;gt;&lt;/code&gt; 中长度精确的整型, 如 &lt;code&gt;int16_t&lt;/code&gt;.如果您的变量可能不小于 &lt;code&gt;2^31 (2GiB)&lt;/code&gt;, 就用 64 位变量比如 &lt;code&gt;int64_t&lt;/code&gt;. 此外要留意，哪怕您的值并不会超出 int 所能够表示的范围，在计算过程中也可能会溢出。所以拿不准时，干脆用更大的类型。&lt;/p&gt;
+
+&lt;p&gt;不要使用 &lt;code&gt;uint32_t&lt;/code&gt; 等无符号整型, 除非你是在表示一个位组而不是一个数值, 或是你需要定义二进制补码溢出. 尤其是不要为了指出数值永不会为负, 而使用无符号类型. 相反, 你应该使用断言来保护数据.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;64 位下的可移植性&lt;/strong&gt; 你要非常小心的对待结构体对齐, 尤其是要持久化到磁盘上的结构体。在 64 位系统中, 任何含有 &lt;code&gt;int64_t/uint64_t&lt;/code&gt; 成员的类/结构体, 缺省都以 8 字节在结尾对齐. 如果 32 位和 64 位代码要共用持久化的结构体, 需要确保两种体系结构下的结构体对齐一致. 大多数编译器都允许调整结构体对齐. gcc 中可使用 &lt;code&gt;__attribute__((packed))&lt;/code&gt;。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;预处理宏&lt;/strong&gt; 使用宏时要非常谨慎, 尽量以内联函数, 枚举和常量代替之。
+下面给出的用法模式可以避免使用宏带来的问题; 如果你要宏, 尽可能遵守:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;不要在 .h 文件中定义宏.&lt;/li&gt;
+  &lt;li&gt;在马上要使用时才进行 #define, 使用后要立即 #undef.&lt;/li&gt;
+  &lt;li&gt;不要只是对已经存在的宏使用#undef，选择一个不会冲突的名称；&lt;/li&gt;
+  &lt;li&gt;不要试图使用展开后会导致 C++ 构造不稳定的宏, 不然也至少要附上文档说明其行为.&lt;/li&gt;
+  &lt;li&gt;不要用 ## 处理函数，类和变量的名字。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;nullptr 和 NULL&lt;/strong&gt; 对于指针 (地址值), 到底是用 0, NULL 还是 nullptr. C++11 项目用 nullptr; C++03 项目则用 NULL, 毕竟它看起来像指针。实际上，一些 C++ 编译器对 NULL 的定义比较特殊，可以输出有用的警告，特别是 sizeof(NULL) 就和 sizeof(0) 不一样。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;sizeof&lt;/strong&gt; 尽可能用 &lt;code&gt;sizeof(varname)&lt;/code&gt; 代替 &lt;code&gt;sizeof(type)&lt;/code&gt;。使用&lt;code&gt;sizeof(varname)&lt;/code&gt; 是因为当代码中变量类型改变时会自动更新。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;auto&lt;/strong&gt; 用 auto 绕过烦琐的类型名，只要可读性好就继续用，别用在局部变量之外的地方。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Lambda 表达式&lt;/strong&gt; 适当使用 lambda 表达式。别用默认 lambda 捕获，所有捕获都要显式写出来。&lt;/p&gt;
+
+&lt;h4 id=&quot;命名约定&quot;&gt;命名约定&lt;/h4&gt;
+
+&lt;p&gt;&lt;strong&gt;通用命名规则&lt;/strong&gt; 函数命名，变量命名，文件命名要有描述性；少用缩写。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;文件命名&lt;/strong&gt; 文件名要全部小写, 可以包含下划线 (&lt;em&gt;) 或连字符 (-). 按项目约定来. 如果并没有项目约定，”&lt;/em&gt;” 更好。
+C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名更加明确.
+内联函数必须放在 .h 文件中. 如果内联函数比较短, 就直接放在 .h 中.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;类型命名&lt;/strong&gt; 类型名称的每个单词首字母均大写, 不包含下划线: MyExcitingClass, MyExcitingEnum.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;变量命名&lt;/strong&gt; 变量名一律小写, 单词之间用下划线连接. 类的成员变量以下划线结尾, 但结构体的就不用，如&lt;code&gt;::a_local_variable&lt;/code&gt;, &lt;code&gt;a_struct_data_member&lt;/code&gt;, &lt;code&gt;a_class_data_member_&lt;/code&gt;.&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;类数据成员：不管是静态的还是非静态的，类数据成员都可以和普通变量一样, 但要接下划线。&lt;/li&gt;
+  &lt;li&gt;结构体变量:不管是静态的还是非静态的，结构体数据成员都可以和普通变量一样, 不用像类那样接下划线。&lt;/li&gt;
+  &lt;li&gt;对全局变量没有特别要求, 少用就好, 但如果你要用, 可以用 &lt;code&gt;g_&lt;/code&gt; 或其它标志作为前缀, 以便更好的区分局部变量.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;常量命名&lt;/strong&gt; 在全局或类里的常量名称前加 k: &lt;code&gt;kDaysInAWeek&lt;/code&gt;. 且除去开头的 k 之外每个单词开头字母均大写。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;函数命名&lt;/strong&gt; 常规函数: 函数名的每个单词首字母大写, 没有下划线。
+取值和设值函数: 取值（Accessors）和设值（Mutators）函数要与存取的变量名匹配。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;名字空间命名&lt;/strong&gt; 名字空间用小写字母命名, 并基于项目名称和目录结构: &lt;code&gt;google_awesome_project&lt;/code&gt;。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;枚举命名&lt;/strong&gt; 枚举的命名应当和 常量 或 宏 一致: &lt;code&gt;kEnumName&lt;/code&gt; 或是 &lt;code&gt;ENUM_NAME&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;宏命名&lt;/strong&gt; 像这样命名: &lt;code&gt;MY_MACRO_THAT_SCARES_SMALL_CHILDREN&lt;/code&gt;。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;命名规则的特例&lt;/strong&gt; 如果你命名的实体与已有 C/C++ 实体相似, 可参考现有命名策略.
+&lt;code&gt;bigopen()&lt;/code&gt; 参照　&lt;code&gt;open()&lt;/code&gt;, &lt;code&gt;uint&lt;/code&gt; 使用　typedef, &lt;code&gt;LONGLONG_MAX&lt;/code&gt; 参照常量&lt;code&gt;INT_MAX&lt;/code&gt;。&lt;/p&gt;
+
+&lt;h4 id=&quot;注释&quot;&gt;注释&lt;/h4&gt;
+
+&lt;p&gt;&lt;strong&gt;注释风格&lt;/strong&gt; 使用 &lt;code&gt;//&lt;/code&gt; 或 &lt;code&gt;/* */&lt;/code&gt;, 统一就好.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;文件注释&lt;/strong&gt; 在每一个文件开头加入版权公告, 然后是文件内容描述.
+每个文件都应该包含以下项, 依次是:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;版权声明 (比如, Copyright 2008 Google Inc.)&lt;/li&gt;
+  &lt;li&gt;许可证. 为项目选择合适的许可证版本 (比如, Apache 2.0, BSD, LGPL, GPL)&lt;/li&gt;
+  &lt;li&gt;作者: 标识文件的原始作者.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;类注释&lt;/strong&gt; 每个类的定义都要附带一份注释, 描述类的功能和用法.&lt;/p&gt;
+
+&lt;p&gt;__ 函数注释__ 函数声明处注释描述函数功能; 定义处描述函数实现.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;变量注释&lt;/strong&gt; 通常变量名本身足以很好说明变量用途. 某些情况下, 也需要额外的注释说明.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;实现注释&lt;/strong&gt; 对于代码中巧妙的, 晦涩的, 有趣的, 重要的地方加以注释.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;标点, 拼写和语法&lt;/strong&gt; 注意标点, 拼写和语法; 写的好的注释比差的要易读的多.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;TODO 注释&lt;/strong&gt; 对那些临时的, 短期的解决方案, 或已经够好但仍不完美的代码使用 TODO 注释.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;弃用注释&lt;/strong&gt; 通过弃用注释（&lt;code&gt;DEPRECATED&lt;/code&gt; comments）以标记某接口点（interface points）已弃用。&lt;/p&gt;
+
+&lt;h4 id=&quot;格式&quot;&gt;格式&lt;/h4&gt;
+
+&lt;p&gt;&lt;strong&gt;行长度&lt;/strong&gt; 每一行代码字符数不超过 80.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;空格还是制表位&lt;/strong&gt; 只使用空格, 每次缩进 2 个空格.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;函数声明与定义&lt;/strong&gt; 返回类型和函数名在同一行, 参数也尽量放在同一行，如果放不下就对形参分行。&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;如果返回类型和函数名在一行放不下，分行。&lt;/li&gt;
+  &lt;li&gt;如果返回类型那个与函数声明或定义分行了，不要缩进。&lt;/li&gt;
+  &lt;li&gt;左圆括号总是和函数名在同一行;&lt;/li&gt;
+  &lt;li&gt;函数名和左圆括号间没有空格;&lt;/li&gt;
+  &lt;li&gt;圆括号与参数间没有空格;&lt;/li&gt;
+  &lt;li&gt;左大括号总在最后一个参数同一行的末尾处;&lt;/li&gt;
+  &lt;li&gt;如果其它风格规则允许的话，右大括号总是单独位于函数最后一行，或者与左大括号同一行。&lt;/li&gt;
+  &lt;li&gt;右大括号和左大括号间总是有一个空格;&lt;/li&gt;
+  &lt;li&gt;函数声明和定义中的所有形参必须有命名且一致;&lt;/li&gt;
+  &lt;li&gt;所有形参应尽可能对齐;&lt;/li&gt;
+  &lt;li&gt;缺省缩进为 2 个空格;&lt;/li&gt;
+  &lt;li&gt;换行后的参数保持 4 个空格的缩进;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;Lambda 表达式&lt;/strong&gt; 其它函数怎么格式化形参和函数体，Lambda 表达式就怎么格式化；捕获列表同理。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;函数调用&lt;/strong&gt; 要么一行写完函数调用，要么在圆括号里对参数分行，要么参数另起一行且缩进四格。如果没有其它顾虑的话，尽可能精简行数，比如把多个参数适当地放在同一行里。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;列表初始化格式&lt;/strong&gt; 怎么格式化函数调用，就怎么格式化:ref:braced_initializer_list。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;条件语句&lt;/strong&gt; 倾向于不在圆括号内使用空格. 关键字 if 和 else 另起一行.
+注意所有情况下 if 和左圆括号间都有个空格. 右圆括号和左大括号之间也要有个空格&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;循环和开关选择语句&lt;/strong&gt; switch 语句可以使用大括号分段，以表明 cases 之间不是连在一起的。在单语句循环里，括号可用可不用。空循环体应使用 {} 或 continue.&lt;/p&gt;
+
+&lt;p&gt;如果有不满足 case 条件的枚举值, switch 应该总是包含一个 default 匹配 (如果有输入值没有 case 去处理, 编译器将报警). 如果 default 应该永远执行不到, 简单的加条 &lt;code&gt;assert(false)&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;空循环体应使用 {} 或 continue, 而不是一个简单的分号.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;指针和引用表达式&lt;/strong&gt; 句点或箭头前后不要有空格. 指针/地址操作符 (*, &amp;amp;) 之后不能有空格.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;布尔表达式&lt;/strong&gt; 如果一个布尔表达式超过 标准行宽, 断行方式要统一一下.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;函数返回值&lt;/strong&gt; return 表达式里时没必要都用圆括号。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;变量及数组初始化&lt;/strong&gt; 用 =, () 和 {} 均可. 为了强制禁用 &lt;code&gt;std::initializer_list&lt;/code&gt; 构造函数，请改用括号。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;预处理指令&lt;/strong&gt; 预处理指令不要缩进, 从行首开始.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;类格式&lt;/strong&gt; 访问控制块的声明依次序是 public:, protected:, private:, 每次缩进 1 个空格.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;构造函数初始值列表&lt;/strong&gt; 构造函数初始值列表放在同一行或按四格缩进并排几行.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;名字空间格式化&lt;/strong&gt; 名字空间内容不缩进. 声明嵌套命名空间时，每命名空间都独立成行，也不需要缩进。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;水平留白&lt;/strong&gt; 水平留白的使用因地制宜. 永远不要在行尾添加没意义的留白.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;垂直留白&lt;/strong&gt; 垂直留白越少越好.&lt;/p&gt;
+
+</description>
+        <pubDate>Sat, 10 Dec 2016 18:16:09 +0800</pubDate>
+        <link>http://localhost:4000/2016/12/10/Google%E7%9A%84C++%E7%BC%96%E7%A0%81%E9%A3%8E%E6%A0%BCTips.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2016/12/10/Google%E7%9A%84C++%E7%BC%96%E7%A0%81%E9%A3%8E%E6%A0%BCTips.html</guid>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+      <item>
+        <title>深入探索C++对象模型（7）</title>
+        <description>&lt;blockquote&gt;
+  &lt;p&gt;深入探索C++对象模型 – 站在对象模型的尖端&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;!-- more --&gt;
+
+&lt;h3 id=&quot;template&quot;&gt;Template&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Template 的“实例化“行为&lt;/strong&gt;
+以下的指针初始化操作不会导致Template的实例化。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;Point&amp;lt; float &amp;gt; *ptr = 0;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;因为一个指向class object的指针，本身并不是一个class object，编译器不需要知道与该class有关的任何members的数据或object布局数据。&lt;/p&gt;
+
+&lt;p&gt;但是将上面的指针换为reference，则会有相应的Template被实例化。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;Point&amp;lt; float &amp;gt; &amp;amp;ptr = 0;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;原因是reference必须绑定到一个对象上面，因此这里的0将被转化为Point&amp;lt; float &amp;gt;的对象，如果类中没有提供这个转化操作则会出现编译错误。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Template Member Function 的实例化&lt;/strong&gt;
+member functions只有当被使用时才会被实例化。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Template 中的名称决议法&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;在Template中，对于一个nonmember name的决议结果，是根据这个那么的使用是否与”用以实例化该template的参数类型“有关而决定的。如果使用不相关，那么就以”scope of the template declaration“ 来决定name。如果其使用互有关联，那么就以”scope of the template instantiation“ 来决定name。举个例子。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;// scope of the template definition
+extern double foo(double);
+
+template &amp;lt;class type&amp;gt;
+class ScopeRules
+{
+public:
+    void invariant()
+    {
+        /* 此次函数调用的参数与template的实例化类型无关，因此会调用double foo(double)*/
+        _member = foo(_val);
+    }
+    type type_dependent()
+    {
+        /* 此次函数调用的参数与template的实例化类型有关，因此会调用实例化时所在的范围内的foo() */
+        return foo(_member);    
+    }
+    // ...
+private:
+    int _val;
+    type _member;
+};
+
+/* ================================== */
+// scope of the template instantiation
+extern int foo(int);
+// ...
+ScopeRules&amp;lt; int &amp;gt; sr0;
+sr0.invarint(); // 调用 double foo(double);
+sr0.type_dependent(); // 调用 int foo(int);
+
+ScopeRules&amp;lt; double &amp;gt; sr1;
+sr1.invarint(); // 调用 double foo(double);
+sr1.type_dependent(); // 调用 double foo(double);
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&quot;异常处理&quot;&gt;异常处理&lt;/h3&gt;
+
+&lt;p&gt;在资源管理方面，为了防止异常发生使得资源没有释放程序就退出了，一般可以将资源进行封装，在构造函数中进行初始化，在析构函数中进行释放操作，这种编程模式可以称为RALL机制，常见的封装是文件打开和关闭和锁的持有和释放。&lt;/p&gt;
+
+&lt;h3 id=&quot;执行期类型识别&quot;&gt;执行期类型识别&lt;/h3&gt;
+
+&lt;p&gt;C++的RTTI机制提供了一个安全的downcast设备，但只对那些展现”多态“的类型有效。具体的实现是每个多态类型的对象中维护一个指针vptr指向virtual table，一般virtual table的第一个slot中存放与该class有关的类型信息RTTI object地址。这个信息只会被设定一次，是由编译器静态设定的。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Type-Safe Dynamic Cast&lt;/strong&gt;
+&lt;code&gt;dynamic_cast&lt;/code&gt; 运算符能够在执行期决定真正的类型。如果downcast是安全的（此时base pointer指向一个derived object），这个运算符会返回一个经过适当转换的指针；如果不是安全的，这个运算符会返回0。&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;dynamic_cast&lt;/code&gt; 实际的实现是取得指针所指对象的真正类型，这个类型信息的地址存在于vptr所指的virtual table的第一个slot中，类型信息类型为&lt;code&gt;type_info&lt;/code&gt; object。&lt;code&gt;type_info&lt;/code&gt;中一般存放的是相应类型的名字，&lt;code&gt;dynamic_cast&lt;/code&gt; 取出输入的指针所指对象的类型信息和要转换的对象的类型信息进行比较，如果相等则说明是可以安全转换的并返回适当转换后的指针，否则返回0。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;References 并不是 Pointers&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;dynamic_cast&lt;/code&gt; 也可以作用于reference，但是当不能安全转换时，并不能直接返回0,而是一个对象。因此，当能够安全的downcast，即输入的reference是参考到derived class，downcast会被安全执行。当不能够安全的downcast时，则会抛出一个&lt;code&gt;bad_cast exception&lt;/code&gt;。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Typeid 运算符&lt;/strong&gt;
+使用typeid运算符能够取出指针或者reference所指代的对象的类型信息，传回一个const reference，类型为&lt;code&gt;type_info&lt;/code&gt;。&lt;/p&gt;
+
+&lt;p&gt;另外用于RTTI机制的这些运算符的具体的运行时间得看输入的指针或者reference所指代的对象是否是多态的。如果是则会在运行时期才能取得其类型信息，否则则会静态取得。&lt;/p&gt;
+</description>
+        <pubDate>Fri, 09 Dec 2016 19:08:21 +0800</pubDate>
+        <link>http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-7.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-7.html</guid>
+        
+        <category>C++</category>
+        
+        <category>memory</category>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+      <item>
+        <title>深入探索C++对象模型（5）</title>
+        <description>&lt;blockquote&gt;
+  &lt;p&gt;深入探索C++对象模型 – 构造、析构、拷贝语意学&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;!-- more --&gt;
+
+&lt;h4 id=&quot;纯虚函数的存在&quot;&gt;纯虚函数的存在&lt;/h4&gt;
+&lt;p&gt;&lt;strong&gt;纯虚函数可以有函数体的&lt;/strong&gt;
+今天看书才发现，纯虚函数是可以有函数体的，也就是可以实现的。那么带有实现的纯虚函数的作用是什么？现在发现的有两个。&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;当子类的对象析构时，子类的析构函数会以&lt;em&gt;静态调用&lt;/em&gt;的方式来调用父类的析构函数，这里的父类包括当前类的所有base class，当然也包括当前类继承的抽象类，因此抽象类的析构函数可以为纯虚函数，但是一定得有实现，这两者并不矛盾。一个比较好的实现方案是不要将虚析构函数设计为纯虚函数。&lt;/li&gt;
+  &lt;li&gt;如果继承这个抽象类的子类有很多相同的功能，则可以将这些相同的功能放在抽象类中作为纯虚函数的实现，在子类中使用静态调用的方式进行调用。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&quot;继承体系下的对象构造&quot;&gt;继承体系下的对象构造&lt;/h4&gt;
+&lt;p&gt;一般编译器可能会以下面所说的顺序扩充每一个constructor。&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;记录在member initialization list 中的data members 初始化操作会被放进constructor的函数体，并以 members 的声明顺序为顺序。&lt;/li&gt;
+  &lt;li&gt;如果有一个member 并没有出现在member initialization list 之中，但它有一个default constructor，那么该default constructor 必须被调用。&lt;/li&gt;
+  &lt;li&gt;在上述步骤之前，如果class object有virtual table pointers，它们必须被设定初值，指向适当的virtual tables。&lt;/li&gt;
+  &lt;li&gt;在上述步骤之前，所有上一层的base class constructors 必须被调用，以base class 的声明顺序为顺序（与member initialization list中的顺序没关联）：
+    &lt;ul&gt;
+      &lt;li&gt;如果 base class 被列于member intialization list 中，那么任何显示指定的参数都应该传递过去。&lt;/li&gt;
+      &lt;li&gt;如果 base class 没有被列于member initialization list 中，而它有default constructor （或default memberwise copy constructor），那么调用之。&lt;/li&gt;
+      &lt;li&gt;如果 base class 是多重继承下的第二或后继的base class，那么this指针必须有所调整。&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;在上述步骤之前，所有virtual base class constructors 必须被调用，从左到右，从最深到最浅：
+    &lt;ul&gt;
+      &lt;li&gt;如果class被列于member initilization list中，那么如果有任何显示指定的参数，都应该传递过去。若没有列于list之中，而class有一个default constructor，亦应该调用之。&lt;/li&gt;
+      &lt;li&gt;此外，class 中的每一个virtual base class subobject 的偏移位置必须在执行期可被获取。&lt;/li&gt;
+      &lt;li&gt;如果 class object 是最底层 （most-derived）的class，其constructors 可能被调用；某些用以支持这一行为的机制必须被放进来。&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;strong&gt;虚拟继承&lt;/strong&gt;
+“virtual base class constructors”在以下情况中才被调用：只有当一个完整的class object 被定义出来时，它才会被调用；如果object 只是某个完整object的subobject，它就不会被调用。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;vptr 初始化语意学&lt;/strong&gt;
+在一个class的constructor中，经由构造中的对象来调用一个virtual function，其函数实例应该是在此class中有作用的那个。比如Derived-Class正在调用构造函数，其中正在执行Base-Class的构造函数，如果在Base-Class的构造函数调用virtual function，此时调用的是Base-Class中的相应函数实例。&lt;/p&gt;
+
+&lt;p&gt;编译器如何保证上述的行为的？
+是通过在适当的时机设定vptr的值，vptr设定不同的值就可以限定调用不同的虚拟函数。其中所说的时机是在base class constructors 调用操作之后，但是在程序员供应的代码或是“member initialization list中所列的members初始化操作”之前。如果没一个constructor 都一直等待到其 base class constructor 执行完毕之后才设定其对象的vptr，那么每次他都能够调用正确的virtual function 实例。&lt;/p&gt;
+
+&lt;p&gt;因此在class 的constructor 的member intialization list中调用该class的一个虚拟函数是安全的，因此此时vptr已经设置完毕。但是可能调用的实例并不是我们开始期待的调用函数。&lt;/p&gt;
+
+&lt;h4 id=&quot;析构语意学&quot;&gt;析构语意学&lt;/h4&gt;
+&lt;p&gt;如果class 没有定义destructor，那么只有在class内含的member object（或class自己的base class）拥有destructor的情况下，编译器才会自动合成出一个来。&lt;/p&gt;
+</description>
+        <pubDate>Fri, 09 Dec 2016 04:17:50 +0800</pubDate>
+        <link>http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-5.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-5.html</guid>
+        
+        <category>C++</category>
+        
+        <category>memory</category>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+      <item>
+        <title>深入探索C++对象模型（6）</title>
+        <description>&lt;blockquote&gt;
+  &lt;p&gt;深入探索C++对象模型 – 执行期语意学&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h4 id=&quot;对象的构造和析构&quot;&gt;对象的构造和析构&lt;/h4&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;编译器会在每个执行分支的结束位置放置相应的析构函数。在实际编程中，应该将对象的构造操作放在需要使用的位置，这样可以避免多余的对象构造和销毁工作。&lt;/li&gt;
+  &lt;li&gt;使用静态初始化的objects(一般是全局变量或者是静态局部变量)有一些缺点，因为这些objects的初始化操作不能被放置在exception handling中，因此如果构造函数抛出异常将会导致程序直接结束。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&quot;new-和-delete-运算符&quot;&gt;new 和 delete 运算符&lt;/h4&gt;
+&lt;p&gt;&lt;strong&gt;operator new&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;当要分配的大小为0时，operator new 将会分配一个字节的内存空间，并将其地址返回。&lt;/li&gt;
+  &lt;li&gt;operator new 支持用户设置&lt;code&gt;_new_handler()&lt;/code&gt;，当内存分配出现错误时这个函数将会被调用。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;new 和数组&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;对数组的分配和释放应该使用成对的格式。如&lt;code&gt;new arr[N]; ...; delete [] arr&lt;/code&gt;。&lt;/li&gt;
+  &lt;li&gt;释放数组时，应该调用数组元素的实际类型，如下所示。
+```
+class Point; // Base class
+class Point3d; // Derived class&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;// 容易出错的使用方式
+Point &lt;em&gt;ptr = new Point3d[10];
+// 下面的释放操作将会对数组中的每个元素调用Point的析构函数，另外，这个析构函数在除了第一个元素析构在正确的起始位置，后续的元素析构的内存位置也不对，因为Base class 的大小和Derived class的大小并不一定一样。
+delete [] ptr;
+// 可以采取的方案是，依次对数组中每个元素(类型为Point&lt;/em&gt;，实际指向Point3d对象)使用delete来启动虚拟机制，调用Point3d的析构函数，最后也会调用Point的析构函数将整个对象进行析构和释放。
+```
+&lt;strong&gt;Placement Operator New 的语意&lt;/strong&gt;
+Placement operator new执行以下两项操作。&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;在输入的指针所指的内存上面构造对象&lt;/li&gt;
+  &lt;li&gt;将输入的指针返回&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;值得注意的问题&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;如果输入的指针所指的位置如果已经有对象，使用placement operator delete可以将原有对象进行析构，但是不会释放相应内存。&lt;/li&gt;
+  &lt;li&gt;输入的指针所指的内存大小必须能够容纳的下要构造的对象。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&quot;临时性对象&quot;&gt;临时性对象&lt;/h4&gt;
+&lt;p&gt;在C++标准中关于临时性对象在何时销毁有如下规则。&lt;/p&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;临时性对象的被销毁，应该是对完整表达式求值过程的最后一个步骤。该完整表达式造成临时对象的产生。(Section 12.2)&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;但是有两个例外。&lt;/p&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;… 凡持有表达式执行结果的临时性对象，应该存留到object的初始化操作完成为止。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;如果一个临时性对象被绑定于一个reference，对象将残留，直到被初始化之的reference的生命结束，或直到临时对象的生命范畴结束，视哪一种情况先到达而定。&lt;/p&gt;
+&lt;/blockquote&gt;
+</description>
+        <pubDate>Fri, 09 Dec 2016 00:24:36 +0800</pubDate>
+        <link>http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-6.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-6.html</guid>
+        
+        <category>C++</category>
+        
+        <category>memory</category>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+      <item>
+        <title>深入探索C++对象模型（2）</title>
+        <description>&lt;blockquote&gt;
+  &lt;p&gt;深入探索C++对象模型 – 构造函数语意学&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h4 id=&quot;implicit-default-constructor-什么时候会被编译器形成&quot;&gt;Implicit Default Constructor 什么时候会被编译器形成？&lt;/h4&gt;
+
+&lt;p&gt;在很多C++的教材中，都会提到这样一条规则，当类中如果没有定义任何构造函数时，default constructor 会被编译器自动产生。但是，实际上只有在某些条件下编译器才会产生default constructor。&lt;/p&gt;
+
+&lt;p&gt;值得注意的是，即使编译器会合成default constructor，这些合成的default constructor也不会初始化普通成员变量。&lt;/p&gt;
+
+&lt;p&gt;在以下条件下，编译器会在没有定义任何constructor的类中合成default constructor。&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;类中的数据成员是一个类的对象，而且这个类中含有default constructor。（值得注意的是，如果当前类中已经定义default constructor，则编译器会将每一个对象成员的default constructor以声明的顺序放在当前的default constructor的最前面）&lt;/li&gt;
+  &lt;li&gt;带有default constructor 的Base Class，编译器合成default constructor来调用Base Class的默认构造函数。如果类中还有类对象成员，则其默认构造函数在Base Class的默认构造函数之后执行。（如果，当前类已经定义了default constructor，编译器则会在构造函数之内调用Base Class的默认构造函数）&lt;/li&gt;
+  &lt;li&gt;带有一个Virtual Fuction 的Class，在编译期间，一个装有class的虚拟函数地址的virtual table会被合成出来，对于没有声明任何构造函数的class，编译器会合成一个默认构造函数设置指向这个virtual table的指针vptr的初值。&lt;/li&gt;
+  &lt;li&gt;带有virtual base class。由于虚拟继承的基类所对应的对象在子类的对象中的位置只有在执行期才能知道。对于，class中的每个构造函数，编译器会安插一些代码，允许在执行期存取virtual base class的成员。对于，没有定义构造函数的class，编译器会合成一个默认构造函数，然后安插这些代码。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&quot;copy-constructor-的构造操作&quot;&gt;Copy Constructor 的构造操作&lt;/h4&gt;
+
+&lt;p&gt;以下讨论基于当前的类中没有定义copy constructor
+&lt;strong&gt;Bitwise Copy Semantics&lt;/strong&gt;
+如下面的class，在进行对象拷贝时，可以使用memove对其按位进行拷贝，即使生成默认的拷贝构造函数也是做相同的事情，在这种情况下，可以认为这个类是具有Bitwise Copy Semantics。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;class Word {
+public:
+    Word(const char*);
+    ~Word() { delete [] str; }
+
+private:
+    int cnt;
+    char *str;
+};
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;那什么时候Class不会具有Bitwise Copy Semantics?&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;当class内部的数据成员包含一个类对象成员时，且这个成员自身含有Copy Constructor（这个拷贝构造函数可能是由用户自己定义的或者是由编译器生成的）&lt;/li&gt;
+  &lt;li&gt;当class继承一个base-class时，base-class中含有Copy Constructor(这个拷贝构造函数可能是由用户自己定义的或者是由编译器生成的)&lt;/li&gt;
+  &lt;li&gt;当class声明一个或多个virtual function时&lt;/li&gt;
+  &lt;li&gt;当class 派生自一个继承串，其中有一个或多个virtual base class时&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;对于前两种情况，开始比较迷惑，觉得使用按位拷贝就可以了，但是最后仔细琢磨就会发现，当对数据成员逐个进行拷贝时，如果此时进行拷贝的数据成员也是一个类的对象实例，那么编译器会倾向于首先检查该对象实例中是否含有拷贝构造函数（可以是用户定义或者是由编译器合成），如果有拷贝构造函数，则编译器必须在当前类中合成拷贝构造函数来调用数据成员的自己的拷贝构造函数。如果在对数据成员进行逐个拷贝时使用按位拷贝，则不会调用数据成员的自身的拷贝构造函数（如果有的话），这样拷贝可能不是用户需要的语意（比如用户在数据成员对应的类中定义了用于深拷贝的拷贝构造函数）。说了这么多，其实核心还是编译器会首选用户定义的拷贝构造函数，当当前class中没有拷贝构造函数，但是类对象数据成员中存在数据成员时，编译器会合成拷贝构造函数来调用类对象数据成员的拷贝构造函数。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;继承体系中含有Virtual Functions&lt;/strong&gt;
+加入base-class中含有virtual functions，derived-class继承这个base-class。相同的类型的对象之间进行拷贝，按位拷贝可以保证被赋值的对象中的vptr指向正确的virtual table地址。但是当derived-class的对象赋值给其base-class的实例时，编译器会为base-class合成拷贝构造函数（如果没有定义的话）将新的对象的vptr设置到base-class的virtual table的地址，因为每个类拥有一个virtual table，因此必须需要编译器介入设置vptr。如果已经设置了拷贝构造函数，编译器也会在其中加入设置vptr的代码。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;继承中含有Virtual Base Class&lt;/strong&gt;
+假如现在有三个类，类A，类B以虚拟继承的方式继承自A，类C继承自类B。由于在虚拟继承的对象模型中，一般是将virtual base class所对应的对象在子类中（如B，C）的位置放置在virtual function table中（可以参考第三章），类B和类C中分别拥有一个virtual function table，而且里面关于类A所对应的对象的偏移并不一定相同，因此当将类C的对象赋值给类B的对象时，编译器会合成Copy Consructor来适当设置类A的对象在子类中的偏移位置。&lt;/p&gt;
+
+&lt;h4 id=&quot;程序转化语意学&quot;&gt;程序转化语意学&lt;/h4&gt;
+
+&lt;p&gt;关于书中Copy Constructor(既可以是用户定义的，也可以是由编译器合成)会将NRV功能开启，网上说与copy constructor无关，但是这里存在一个疑问，当NRV优化使用时是不会调用copy constructor的，怎么证明NRV确实与Copy Constructor相关？当类中存在copy constructor时，经验证NRV优化确实已经开启，但是这并不能证明使用copy constructor将NRV优化功能开启。
+可以使用另外一种方式进行验证，假如有一下函数：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;A process()
+{
+    A a;
+    ...
+    return a;
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;如果NRV开启，这里的a在此时不会被析构掉，这个可以通过在类A的析构函数中打印内容进行验证，使用GDB来单步执行，会发现不管使不使用copy constructor，在process函数返回时，构造的对象a并没有被析构，说明使用了NRV优化。&lt;/p&gt;
+
+&lt;h4 id=&quot;成员们的初始化队伍&quot;&gt;成员们的初始化队伍&lt;/h4&gt;
+&lt;p&gt;对于初始化列表中的初始化过程中，一般是base-class函数的初始化函数先执行，然后是初始化列表中的成员变量按照&lt;strong&gt;声明的顺序&lt;/strong&gt;进行初始化，这些初始化完毕后才会执行函数体内的初始化工作。&lt;/p&gt;
+
+&lt;p&gt;需要在初始化列表中初始化的情况有如下几种。&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;当初始化一个reference member时&lt;/li&gt;
+  &lt;li&gt;当初始化一个const member时&lt;/li&gt;
+  &lt;li&gt;当调用一个base class的constructor，而它拥有一组参数&lt;/li&gt;
+  &lt;li&gt;当调用一个member class 的constructor，当它有一组参数时&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&quot;使用copy-constructor需要注意的问题&quot;&gt;使用copy-constructor需要注意的问题&lt;/h4&gt;
+&lt;p&gt;如果当前类有个基类，且基类定义了相应的copy constructor，如果在定义当前类的copy constructor时没有在初始化列表中调用基类的copy constructor，编译器会在当前的copy constructor中插入基类的默认构造函数，显然这是不对的。因此一定要记得在copy constructor的初始化成员列表中调用基类的copy constructor（如果基类定义了copy constructor）。&lt;/p&gt;
+</description>
+        <pubDate>Wed, 07 Dec 2016 22:05:46 +0800</pubDate>
+        <link>http://localhost:4000/2016/12/07/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-2.html</link>
+        <guid isPermaLink="true">http://localhost:4000/2016/12/07/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-2.html</guid>
+        
+        <category>C++</category>
+        
+        <category>memory</category>
+        
+        
+        <category>programming</category>
+        
+      </item>
+    
+  </channel>
+</rss>

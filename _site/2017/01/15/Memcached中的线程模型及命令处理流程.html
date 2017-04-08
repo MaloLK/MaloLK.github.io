@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <title>@malolk - Liu Kai's blog</title>
+    <meta name="description" content="@malolk Liu Kai's blog" />
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="MobileOptimized" content="320" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css" />
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Merriweather:300,700,700italic,300italic|Open+Sans:700,400" />
+    <!-- Customisation  -->
+    <link rel="stylesheet" type="text/css" href="/assets/css/main.css" />
+
+</head>
+<body class="home-template">
+
+    <header class="main-header post-head no-cover">
+    <nav class="main-nav  clearfix">
+        <a class="back-button icon-arrow-left" href="">Home</a>
+        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+    </nav>
+</header>
+
+<main class="content" role="main">
+
+    <article class="post">
+
+        <header class="post-header">
+            <h1 class="post-title">Memcached中的线程模型和命令处理流程</h1>
+            <section class="post-meta">
+                <time class="post-date" datetime="2017-01-15">15 Jan 2017</time>
+                
+                    on programming
+                
+            </section>
+        </header>
+
+<!--         <header class="post-header">
+            <a id="blog-logo" href="http://localhost:4000">
+                
+                    <span class="blog-title">@malolk</span>
+                
+            </a>
+        </header> -->
+
+        <!-- <span class="post-meta">
+            <time datetime="2017-01-15">15 Jan 2017</time>
+            
+                on programming
+            
+        </span> -->
+
+        <!-- <h1 class="post-title">Memcached中的线程模型和命令处理流程</h1> -->
+
+        <section class="post-content">
+            <h4 id="线程模型">线程模型</h4>
+<p>memcached中的线程模型比较通用，主线程中有一个event_loop专门监听新的连接，如果有新的连接到来则将其派给一个worker线程处理，每个worker线程自己也有一个event_loop，这个loop主要监听是否主线程派了新的连接过来，当前连接可写事件、可读事件和关闭等状态转换。还有一些辅助的线程如slab平衡线程（用来转移各个slab的空闲内存页），lru维护线程（用于促进lru中item的流动）以及lru爬虫线程(将lru中已经过期或者被flushed掉的item删除)，timeout线程（周期性的检查是否有闲置连接并将闲置连接关闭）。</p>
+
+<h5 id="worker线程的启动过程">worker线程的启动过程</h5>
+<ol>
+  <li>根据要创建的线程个数设置段锁的范围</li>
+  <li>设置线程结构体</li>
+  <li>创建线程，线程函数为<code>worker_libevent</code>，之后主线程调用<code>wait_for_thread_registration</code>，然后睡眠在<code>init_lock</code>上等待子线程注册完毕。同时子线程的步骤如下:
+    <ul>
+      <li><code>worker_libevent</code>中每一个thread中设置单独的logger，调用<code>register_thread_initialized()</code>向主线程注册当前线程，然后进入当前线程的event_loop。</li>
+      <li><code>register_thread_initialized</code>的主要工作为增加已经注册的线程个数<code>init_count</code>，然后通知主线程。如果所有的worker线程已经启动完毕，则主线程会退出<code>wait_for_thread_registration</code>。</li>
+    </ul>
+  </li>
+</ol>
+
+<h5 id="主线程向worker线程传送新的连接的流程">主线程向worker线程传送新的连接的流程</h5>
+<p>源码中维持一个用于存储连接信息结构体的内存池(cqi_free_list)。内存池的管理方式是，主线程负责从内存池中获取结构体，如果没有空闲的结构体则每次分配预定数目的结构体，而worker线程则负责将结构体放回内存池。取出放回的操作都需要锁保护。</p>
+
+<ol>
+  <li>首先从<code>CQ_ITEM</code>内存池中分配一个新的item</li>
+  <li>使用轮转法选择一个worker线程</li>
+  <li>设置item中的sfd等信息，将其压入到所选的线程的待处理连接队列中</li>
+  <li>向worker线程中的pipe中写入字符<code>c</code>代表有新的连接</li>
+  <li>worker线程中的pipe对应的文件描述符的事件回调函数<code>thread_libevent_process</code>将会被调用，在pipe中读取到的字符为<code>c</code>的情况下，则表示有新的连接，从待处理连接中取出一个<code>cq_item</code>，调用<code>conn_new</code>根据<code>cq_item</code>中的信息创建新的连接，接着将<code>cq_item</code>是放到<code>CQ_ITEM</code>内存池。</li>
+  <li><code>conn_new</code>会进行以下操作：<strong>使用连接的文件描述符索引conns指针数组</strong>，由于连接的文件描述符是唯一的，因此这里访问全局的<code>conns</code>没有加锁，如果conns中对应的指针为<code>NULL</code>，则表示这个文件描述符从来都没有被使用过，因此为其分配<code>conn</code>结构体，接着设置连接的缓冲等信息，另外从<code>dispatch_conn_new</code>的调用可以看出所有的连接的默认事件是读事件，读事件会在此时注册到相应的<code>event_loop</code>中。<strong>当连接释放时，conns中对应的连接结构体不会释放，而是被重复利用，只是连接结构体中的指针对应的内存会被释放或归还到相应的内存池</strong>。</li>
+</ol>
+
+<h5 id="连接管理">连接管理</h5>
+
+<h6 id="连接的事件处理event_handler">连接的事件处理<code>event_handler</code></h6>
+<p>这个函数会在<code>conn_new</code>中作为连接的事件回调函数，这个函数其中一个重要的作用是调用<code>drive_machine</code>，该函数根据当前的连接状态，使用不同的处理函数。在<code>dispatch_conn_new</code>中可以看出所有连接的初始状态是<code>conn_new_cmd</code>，也就是处于处理命令的状态，因此在连接中有数据到来时，会转到<code>drive_machine</code>的<code>conn_new_cmd</code>分支，如果此时的read_buffer还没有接收到完整的命令，则会将状态改变为<code>conn_waiting</code>等待读取更多的数据。<strong>值得注意的是，为了防止单个连接一次处理太多的请求导致其他的连接“饿死”，源码中会对每个连接每次处理的requests个数进行限制。但是如果当前已经接受完所有的请求数据，那么除非有新的数据到来，底层的网络库将不会再通知应用层。为了解决这个问题，源码中使用了一个技巧，在处理完一定数量的请求后，为连接设置可写事件，这一般是可行的，然后在下次有可写事件时再判断是否有未处理完的请求。注意此时的连接状态仍然为conn_new_cmd，下次有可写事件时，仍然会转到这个分支</strong></p>
+
+<h6 id="连接中的缓冲处理try_read_network">连接中的缓冲处理<code>try_read_network</code></h6>
+<p>源码中使用的方式是每次尽可能的将连接中的数据读完（可能使用的epoll 的et模式）。但是需要<strong>防止连接缓存内存消耗过多</strong>，源码中限制重新分配内存的次数，如果分配的次数超过预订限制则返回。另外在<strong>处理相邻两个请求之间会将连接的缓冲缩小的适当的大小</strong>。</p>
+
+<h6 id="对同时在线的连接数进行限制">对同时在线的连接数进行限制</h6>
+<p>源码中在接收新的连接时，会检查当前的连接数，如果连接数超过限制，则会给客户端发送错误消息，并将连接关闭，而不再接受新的连接。<strong>那什么时候才能再次接受新的连接呢？源码中采用的方法是设定一个定时器(10ms)z不断的判断当前是否可以重新接受连接，判断的标准是是否有连接关闭（由<code>conn_close来触发</code>）</strong>。</p>
+
+<h6 id="处理timeout连接">处理timeout连接</h6>
+<p>使用单独的一个线程检测连接数组conns中是否有连接已经过期，如果有则向其连接所属的线程发送通知消息，同时传送相应的socket描述符。worker线程会在<code>thread_libevent_process</code>中收到通知并关闭闲置连接。</p>
+
+<h4 id="命令处理流程">命令处理流程</h4>
+<h5 id="get命令">Get命令</h5>
+<p>在memcached中，在处理事件时使用的是状态机，初始状态是读取命令。只有命令处理完毕后才可能会发送数据。接下来说说两个命令get和update的处理流程。
+对于get命令，会经过以下几步。</p>
+<ol>
+  <li>初始状态在conn_new_cmd，当有数据到来时就会进入这个分支，这个分支会根据是否已经接收数据来跳转到下一个状态，如果有数据则开始进行命令解析，否则继续等待读取数据。值得注意的是在conn_new_cmd中对每次单个连接处理请求的个数有一个最大的限制，因为是基于事件机制，可能其他的连接的事件也在等待被处理，如果当前的连接事件处理时间太久则可能会导致其他连接的事件很久才被处理。但是如果当前已经把所有的请求都读取到buffer中，如果没有新的数据到来，底层的libevent是不会通知，这里memcached作者使用了一点小技巧，当出现请求没处理完但是不得不退出时，则会注册可写事件，因为可写事件一般是可行的，只要发送缓冲不满或者对方不关闭连接，应用层在下一次触发写事件时则会跳转到conn_new_cmd,再次说明，memcached处理事件是根据其当前连接的状态而不是事件类型。</li>
+  <li>命令解析部分在get部分需要额外的内存来存放需要发送的数据，在memcached中使用msghdr链表来存放这些数据，一个msghdr只能存储有限的iov结构体，这里为了省去拷贝的时间，将iov结构体内的指针和长度分别设置为返回item的数据地址和长度，另外值得注意的地方是，memcached中可能随时删除这些待返回的item，而iov结构体只是使用指针和地址来标记要发送的数据并没进行拷贝，因此为了防止将待发送的item删除，memcached中对每个使用的item加了引用，并将其加入到链表ilist，这个链表的作用是在将数据发送完毕后及时的将这些item进行解引用。另外，还有一个注意的地方，每次请求都会或多或少的将每个连接的读缓冲或者msglist、ilist等扩大，因此在处理每个命令之间会将这些缓冲的大小缩小到初始大小。</li>
+  <li>在将命令解析完毕并将返回数据在缓冲中标记后，会将状态设置为conn_mwrite。在conn_mwrite这个分支中，主要完成两个工作，第一步是将缓冲中标记的数据发送出去，这一步完成后则会释放缓冲以及对相关item的引用。然后又回到conn_new_cmd的状态。</li>
+</ol>
+
+<h5 id="update命令">Update命令</h5>
+<p>对于update命令来说，这一类命令其实包含set/add／replace/prepend/append等命令的实现，根据具体命令有一些不同的处理。主要有以下几步。</p>
+<ol>
+  <li>第一步跟get命令的第一步处理一样。</li>
+  <li>由于这类命令的格式是分两行输入，memcahced则是每次都只处理一行。这类命令的第一行只能知道命令的具体类型，key，flags，key的过期时间和value部分的长度。在这一步中主要是根据这些信息分配一个item。接下来会将状态设置为conn_nread。</li>
+  <li>conn_nread这个分支分为两步，第一步为不断地读取数据直到value部分的数据已经读完；读完value后则会调用complete_nread将value部分的数据存储在上一步中分配的item中。然后会设置状态为conn_write将命令执行的状态返回，执行完会转移到conn_new_cmd处理新的命令。</li>
+</ol>
+
+        </section>
+
+        
+
+        <footer class="post-footer">
+            <!-- If we want to display author's name and bio -->
+            
+                <figure class="author-image">
+                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <span class="hidden">Liu Kai's Picture</span></a>
+                </figure>
+                <section class="author">
+                    <!-- Author Name -->
+                    <h4> Liu Kai </h4>
+                    <!-- Author Bio -->
+                    <p>
+                        Here goes the author description. You might want to place some links too in here
+                    </p>
+                </section>
+            
+
+            <!-- Share links section -->
+            <section class="share">
+    <h4>Share this post</h4>
+    <a class="icon-twitter" href="http://twitter.com/share?text=Memcached中的线程模型和命令处理流程&amp;url=http://malolk.com/2017/01/15/Memcached%E4%B8%AD%E7%9A%84%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%8F%8A%E5%91%BD%E4%BB%A4%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.html"
+        onclick="window.open(this.href, 'twitter-share', 'width=550,height=235');return false;">
+        <span class="hidden">Twitter</span>
+    </a>
+    <a class="icon-facebook" href="https://www.facebook.com/sharer/sharer.php?u=http://malolk.com/2017/01/15/Memcached%E4%B8%AD%E7%9A%84%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%8F%8A%E5%91%BD%E4%BB%A4%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.html"
+        onclick="window.open(this.href, 'facebook-share','width=580,height=296');return false;">
+        <span class="hidden">Facebook</span>
+    </a>
+    <a class="icon-google-plus" href="https://plus.google.com/share?url=http://malolk.com/2017/01/15/Memcached%E4%B8%AD%E7%9A%84%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%8F%8A%E5%91%BD%E4%BB%A4%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.html"
+       onclick="window.open(this.href, 'google-plus-share', 'width=490,height=530');return false;">
+        <span class="hidden">Google+</span>
+    </a>
+</section>
+
+            <!-- Disqus comments -->
+            
+
+        </footer>
+
+    </article>
+
+</main>
+
+    <footer class="site-footer clearfix">
+      <section class="copyright">
+        <a href="">@malolk</a> &copy; 
+               &bull; All rights reserved.
+      </section>
+      <section class="poweredby">Made with Jekyll using 
+        <a href="http://github.com/rosario/kasper">Kasper theme</a>
+      </section>
+    </footer>
+    
+    <script type="text/javascript" src="/assets/js/jquery-1.11.1.min.js"></script>
+    <script type="text/javascript" src="/assets/js/jquery.fitvids.js"></script>
+    <script type="text/javascript" src="/assets/js/index.js"></script>
+
+    <!-- Google Analytics Tracking code -->
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', '']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>   
+</body>
+</html>

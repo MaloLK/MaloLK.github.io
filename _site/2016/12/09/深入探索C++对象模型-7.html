@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <title>@malolk - Liu Kai's blog</title>
+    <meta name="description" content="@malolk Liu Kai's blog" />
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="MobileOptimized" content="320" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css" />
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Merriweather:300,700,700italic,300italic|Open+Sans:700,400" />
+    <!-- Customisation  -->
+    <link rel="stylesheet" type="text/css" href="/assets/css/main.css" />
+
+</head>
+<body class="home-template">
+
+    <header class="main-header post-head no-cover">
+    <nav class="main-nav  clearfix">
+        <a class="back-button icon-arrow-left" href="">Home</a>
+        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+    </nav>
+</header>
+
+<main class="content" role="main">
+
+    <article class="post">
+
+        <header class="post-header">
+            <h1 class="post-title">深入探索C++对象模型（7）</h1>
+            <section class="post-meta">
+                <time class="post-date" datetime="2016-12-09">09 Dec 2016</time>
+                
+                    on programming
+                
+            </section>
+        </header>
+
+<!--         <header class="post-header">
+            <a id="blog-logo" href="http://localhost:4000">
+                
+                    <span class="blog-title">@malolk</span>
+                
+            </a>
+        </header> -->
+
+        <!-- <span class="post-meta">
+            <time datetime="2016-12-09">09 Dec 2016</time>
+            
+                on programming
+            
+        </span> -->
+
+        <!-- <h1 class="post-title">深入探索C++对象模型（7）</h1> -->
+
+        <section class="post-content">
+            <blockquote>
+  <p>深入探索C++对象模型 – 站在对象模型的尖端</p>
+</blockquote>
+
+<!-- more -->
+
+<h3 id="template">Template</h3>
+
+<p><strong>Template 的“实例化“行为</strong>
+以下的指针初始化操作不会导致Template的实例化。</p>
+<pre><code>Point&lt; float &gt; *ptr = 0;
+</code></pre>
+<p>因为一个指向class object的指针，本身并不是一个class object，编译器不需要知道与该class有关的任何members的数据或object布局数据。</p>
+
+<p>但是将上面的指针换为reference，则会有相应的Template被实例化。</p>
+<pre><code>Point&lt; float &gt; &amp;ptr = 0;
+</code></pre>
+<p>原因是reference必须绑定到一个对象上面，因此这里的0将被转化为Point&lt; float &gt;的对象，如果类中没有提供这个转化操作则会出现编译错误。</p>
+
+<p><strong>Template Member Function 的实例化</strong>
+member functions只有当被使用时才会被实例化。</p>
+
+<p><strong>Template 中的名称决议法</strong></p>
+
+<p>在Template中，对于一个nonmember name的决议结果，是根据这个那么的使用是否与”用以实例化该template的参数类型“有关而决定的。如果使用不相关，那么就以”scope of the template declaration“ 来决定name。如果其使用互有关联，那么就以”scope of the template instantiation“ 来决定name。举个例子。</p>
+<pre><code>// scope of the template definition
+extern double foo(double);
+
+template &lt;class type&gt;
+class ScopeRules
+{
+public:
+    void invariant()
+    {
+        /* 此次函数调用的参数与template的实例化类型无关，因此会调用double foo(double)*/
+        _member = foo(_val);
+    }
+    type type_dependent()
+    {
+        /* 此次函数调用的参数与template的实例化类型有关，因此会调用实例化时所在的范围内的foo() */
+        return foo(_member);    
+    }
+    // ...
+private:
+    int _val;
+    type _member;
+};
+
+/* ================================== */
+// scope of the template instantiation
+extern int foo(int);
+// ...
+ScopeRules&lt; int &gt; sr0;
+sr0.invarint(); // 调用 double foo(double);
+sr0.type_dependent(); // 调用 int foo(int);
+
+ScopeRules&lt; double &gt; sr1;
+sr1.invarint(); // 调用 double foo(double);
+sr1.type_dependent(); // 调用 double foo(double);
+</code></pre>
+
+<h3 id="异常处理">异常处理</h3>
+
+<p>在资源管理方面，为了防止异常发生使得资源没有释放程序就退出了，一般可以将资源进行封装，在构造函数中进行初始化，在析构函数中进行释放操作，这种编程模式可以称为RALL机制，常见的封装是文件打开和关闭和锁的持有和释放。</p>
+
+<h3 id="执行期类型识别">执行期类型识别</h3>
+
+<p>C++的RTTI机制提供了一个安全的downcast设备，但只对那些展现”多态“的类型有效。具体的实现是每个多态类型的对象中维护一个指针vptr指向virtual table，一般virtual table的第一个slot中存放与该class有关的类型信息RTTI object地址。这个信息只会被设定一次，是由编译器静态设定的。</p>
+
+<p><strong>Type-Safe Dynamic Cast</strong>
+<code>dynamic_cast</code> 运算符能够在执行期决定真正的类型。如果downcast是安全的（此时base pointer指向一个derived object），这个运算符会返回一个经过适当转换的指针；如果不是安全的，这个运算符会返回0。</p>
+
+<p><code>dynamic_cast</code> 实际的实现是取得指针所指对象的真正类型，这个类型信息的地址存在于vptr所指的virtual table的第一个slot中，类型信息类型为<code>type_info</code> object。<code>type_info</code>中一般存放的是相应类型的名字，<code>dynamic_cast</code> 取出输入的指针所指对象的类型信息和要转换的对象的类型信息进行比较，如果相等则说明是可以安全转换的并返回适当转换后的指针，否则返回0。</p>
+
+<p><strong>References 并不是 Pointers</strong></p>
+
+<p><code>dynamic_cast</code> 也可以作用于reference，但是当不能安全转换时，并不能直接返回0,而是一个对象。因此，当能够安全的downcast，即输入的reference是参考到derived class，downcast会被安全执行。当不能够安全的downcast时，则会抛出一个<code>bad_cast exception</code>。</p>
+
+<p><strong>Typeid 运算符</strong>
+使用typeid运算符能够取出指针或者reference所指代的对象的类型信息，传回一个const reference，类型为<code>type_info</code>。</p>
+
+<p>另外用于RTTI机制的这些运算符的具体的运行时间得看输入的指针或者reference所指代的对象是否是多态的。如果是则会在运行时期才能取得其类型信息，否则则会静态取得。</p>
+
+        </section>
+
+        
+
+        <footer class="post-footer">
+            <!-- If we want to display author's name and bio -->
+            
+                <figure class="author-image">
+                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <span class="hidden">Liu Kai's Picture</span></a>
+                </figure>
+                <section class="author">
+                    <!-- Author Name -->
+                    <h4> Liu Kai </h4>
+                    <!-- Author Bio -->
+                    <p>
+                        Here goes the author description. You might want to place some links too in here
+                    </p>
+                </section>
+            
+
+            <!-- Share links section -->
+            <section class="share">
+    <h4>Share this post</h4>
+    <a class="icon-twitter" href="http://twitter.com/share?text=深入探索C++对象模型（7）&amp;url=http://malolk.com/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-7.html"
+        onclick="window.open(this.href, 'twitter-share', 'width=550,height=235');return false;">
+        <span class="hidden">Twitter</span>
+    </a>
+    <a class="icon-facebook" href="https://www.facebook.com/sharer/sharer.php?u=http://malolk.com/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-7.html"
+        onclick="window.open(this.href, 'facebook-share','width=580,height=296');return false;">
+        <span class="hidden">Facebook</span>
+    </a>
+    <a class="icon-google-plus" href="https://plus.google.com/share?url=http://malolk.com/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-7.html"
+       onclick="window.open(this.href, 'google-plus-share', 'width=490,height=530');return false;">
+        <span class="hidden">Google+</span>
+    </a>
+</section>
+
+            <!-- Disqus comments -->
+            
+
+        </footer>
+
+    </article>
+
+</main>
+
+    <footer class="site-footer clearfix">
+      <section class="copyright">
+        <a href="">@malolk</a> &copy; 
+               &bull; All rights reserved.
+      </section>
+      <section class="poweredby">Made with Jekyll using 
+        <a href="http://github.com/rosario/kasper">Kasper theme</a>
+      </section>
+    </footer>
+    
+    <script type="text/javascript" src="/assets/js/jquery-1.11.1.min.js"></script>
+    <script type="text/javascript" src="/assets/js/jquery.fitvids.js"></script>
+    <script type="text/javascript" src="/assets/js/index.js"></script>
+
+    <!-- Google Analytics Tracking code -->
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', '']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>   
+</body>
+</html>

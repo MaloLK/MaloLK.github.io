@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <title>@malolk - Liu Kai's blog</title>
+    <meta name="description" content="@malolk Liu Kai's blog" />
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="MobileOptimized" content="320" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css" />
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Merriweather:300,700,700italic,300italic|Open+Sans:700,400" />
+    <!-- Customisation  -->
+    <link rel="stylesheet" type="text/css" href="/assets/css/main.css" />
+
+</head>
+<body class="home-template">
+
+    <header class="main-header post-head no-cover">
+    <nav class="main-nav  clearfix">
+        <a class="back-button icon-arrow-left" href="">Home</a>
+        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+    </nav>
+</header>
+
+<main class="content" role="main">
+
+    <article class="post">
+
+        <header class="post-header">
+            <h1 class="post-title">深入探索C++对象模型（3）</h1>
+            <section class="post-meta">
+                <time class="post-date" datetime="2016-12-04">04 Dec 2016</time>
+                
+                    on programming
+                
+            </section>
+        </header>
+
+<!--         <header class="post-header">
+            <a id="blog-logo" href="http://localhost:4000">
+                
+                    <span class="blog-title">@malolk</span>
+                
+            </a>
+        </header> -->
+
+        <!-- <span class="post-meta">
+            <time datetime="2016-12-04">04 Dec 2016</time>
+            
+                on programming
+            
+        </span> -->
+
+        <!-- <h1 class="post-title">深入探索C++对象模型（3）</h1> -->
+
+        <section class="post-content">
+            <blockquote>
+  <p>深入探索C++对象模型 – Data 语意学</p>
+</blockquote>
+
+<h4 id="对象的大小">对象的大小</h4>
+
+<p><strong>空的class</strong>
+对于一个没有任何成员的class，它的对象的大小并不为0，而是为1。这是因为对象必须在内存中有一个独一无二的地址，所以编译器则会在对象中安插一个隐藏的byte。</p>
+
+<p><strong>影响对象大小的因素</strong></p>
+<ul>
+  <li>语言本身所造成的额外负担，当语言支持virtual base class就会导致一些额外的负担。在子类中会存在一些指向virtual base subobject的指针或者一个指向相应表格的指针，其中表格中存放的要么是virtual base class subobject，要么是其偏移地址。</li>
+  <li>编译器会对特殊情况进行优化，比如对于empty virtual base class的子类，如果也是empty class，则有的编译器不会在其中加入额外的一个字节。</li>
+  <li>字节对齐的限制，为了能够有效的存取，会将对象进行字节对齐，比如32位的机器上，则一般对齐字节为4byte，因此一般会将对象的字节数通过padding将所占字节数调整为4的倍数。</li>
+</ul>
+
+<h4 id="非静态成员和静态成员的放置">非静态成员和静态成员的放置</h4>
+
+<p>对于，非静态成员以及继承来的非静态成员，则会将其直接放置在对象中。但是，对于静态成员，则放置在一个global data segment中，不会影响单个对象的大小。在程序中不管class有多少个对象，静态成员永远只有一份，即使程序中没有class的对象，静态成员也存在，但是对于template class的静态成员则是一个例外。（#NOTE 再补）</p>
+
+<h4 id="data-member-的绑定">Data Member 的绑定</h4>
+
+<p><strong>对于成员的绑定</strong>
+只有当整个class声明完后，成员函数之内使用的变量才开始进行绑定。
+<strong>对类型的绑定</strong>
+应该总是将class内部声明的typedef等语句放置在class的起始处。</p>
+
+<h4 id="data-member-的布局">Data Member 的布局</h4>
+
+<p>对于class中的非静态成员而言，属于同一个访问段(public、private和protected)成员按照声明的顺序依次出现在对象中，这并不意味着他们在内存中连续出现，因为有的member的边界调整会引入一些padding bytes。另外，<strong>C++允许不同的访问段之间自由布局，例如两个数据成员分别声明在两个private访问段中，那么这两个变量在对象中存在的顺序依赖于编译器，但不一定是声明的顺序。</strong>
+对于静态成员，存放在程序的data segment中，因此不会存在于对象的布局中。
+对于编译器合成的一些内部使用的data memebers， 如vptr，C++没有明确规定编译器将其放在对象的哪个位置。</p>
+
+<h4 id="data-member-的存取">Data Member 的存取</h4>
+
+<p><strong>对于静态的成员的存取</strong>
+静态成员可以通过类或者对象存取，它存在于程序的数据段中，如果对静态数据成员取地址，会得到一个指向其数据类型的地址，而不是一个class member的指针。它只在对应的class生命范围内可见。
+多个不同的类拥有名字相同的静态成员，为了防止名称冲突，编译器会使用name-mangling对其名字进行修饰，使其变得独一无二。</p>
+
+<p><strong>对非静态成员的存取</strong>
+对一个非静态成员进行存取，如<code>origin._y = 0.0;</code>，编译器需要将对象的起始地址加上成员的偏移地址算作成员的地址，因此上述的式子可以写成<code>&amp;origin + (&amp;Point3d::_y - 1)</code>，其中的-1是特意为之。指向数据成员的指针总是会被加上1,因此需要减去1获得真正的偏移地址。这样做的原因是为了区分“一个指向第一个数据成员的指针”和“没有指向任何数据成员的指针”。可以看如下示例。</p>
+<pre><code>float Point3d::*p1 = 0; // 没有指向任何数据成员
+float Point3d::*p2 = &amp;Point3d::x; // 指向第一个数据成员，其实是数据成员x在对象中的偏移地址加1，
+                                  // 如果不加1，则为0, 无法与上一行中的情况区分。因此在求取数据
+                                  // 成员在对象中的偏移地址需要减去1得到真正的偏移地址。
+</code></pre>
+<p>使用对象进行直接存取，通过偏移地址的计算，可以在编译器就可以获得数据成员的地址，因此与C中struct数据成员存取在效率上相当。甚至当存在单一继承或者多继承时，要存取的数据成员如果是从基类继承而来，也可以在编译器获得数据成员在当前对象中的偏移地址。</p>
+
+<p>但是如果使用指针进行存取时，就不一定了。考虑如下的情况。</p>
+<pre><code>pt-&gt;x = 0.0;
+</code></pre>
+<p>如果pt的类型为一个基类，而且继承关系中存在virtual base class，而且现在存取的member是从该virtual base class中继承来的，此时的情况就与上述的使用对象进行存取在效率上会有较大的差异。因为现在不能够确定pt实际所指的对象到底是什么，只有等到执行期才能获得该对象的信息，从而才能够得到数据成员在对象中的偏移地址。而使用对象进行存取可以在编译器直接获得数据成员的地址，因此两种方式在存取效率上就会有较大差异。</p>
+
+<h4 id="继承-与-data-member">“继承” 与 Data Member</h4>
+
+<p><strong>继承带来的额外负担</strong>
+C++保证出现在derived class中的base class subobject有其完整性，换句话说就是将一个子类型的对象赋给一个父类型的变量得到的父类型的变量应该是一个完好的父类型对象。然而为了保证这种特性，在继承之中就可能会产生额外的开销。这些额外开销是由对齐要求引入的，如果base class subobject需要额外的字节padding来完成对齐，记为padding1，那么在子类对象中也应该保证有完全相同的padding方式，而此时子类中的成员可能也不是对齐的，因此也需要对其进行padding才能对齐，记为padding2，更加节省空间的方法是将padding1和padding2合并，然后在尾端进行统一的padding，但是如果这样做就不能保证将子类型对象赋值给基类对象时仍然具有我们预期的完整的基类，可能此时本应该是padding的地方却有了值。</p>
+
+<p><strong>多态带来的额外负担</strong>
+如果某个类引入了虚函数，那么一般会有以下几方面的开销。</p>
+<ul>
+  <li>导入一个与此类有关的virtual table，用来存放所声明的每一个虚拟函数地址。table的大小是虚函数的个数，再加上一两个slot用于运行时类型识别的</li>
+  <li>在每一个该类的对象中导入一个vptr，使每一个对象在执行期能够找到相应的vtable</li>
+  <li>加强constructor，为vptr设定初值，让它指向该类所对应的vtable</li>
+  <li>加强destructor，抹消指向相关vtable的vptr。在继承中，destructor的调用方向是相反的，即从derived class到base class</li>
+</ul>
+
+<p><strong>虚拟继承的实现</strong>
+主要考虑的问题是如何存取virtual base class中的成员？特别是有多个virtual base class的情况下。且需要满足对象的大小不随着virtual base class 的个数增长，另外对virtual base class 的存取的时间应该是固定的，而不随着继承的深度增加而增加。</p>
+<ul>
+  <li>引入virtual base class table，编译器会在每个有virtual base subobject的对象中安插一个指向相应的virtual base class table</li>
+  <li>在virtual function table中放置virtual base class的offset。因此使用指针来访问一个在virtual base中的数据成员则只能在执行期才能知道相应virtual base class在对象中的偏移位置，而使用对象直接访问则可以在编译时期就可以知道数据成员在对象中的偏移。</li>
+</ul>
+
+<h4 id="指向data-members-的指针">指向Data Members 的指针</h4>
+<p>指向Data Members的指针实际上就是数据成员在类中的偏移。下面两种获取成员的效果是一样的。</p>
+<pre><code>float Point3d::*p1 = &amp;Point3d::x;
+Point3d p3d;
+// 直接存取
+cout &lt;&lt; p3d.x &lt;&lt; endl;
+// 使用指向Data Members的指针间接存取，效率较低, 因为要把指向Data Members的指针，在这里是p1，需要将p1额外的减1。
+cout &lt;&lt; point.*p1 &lt;&lt; endl;
+</code></pre>
+
+        </section>
+
+        
+
+        <footer class="post-footer">
+            <!-- If we want to display author's name and bio -->
+            
+                <figure class="author-image">
+                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <span class="hidden">Liu Kai's Picture</span></a>
+                </figure>
+                <section class="author">
+                    <!-- Author Name -->
+                    <h4> Liu Kai </h4>
+                    <!-- Author Bio -->
+                    <p>
+                        Here goes the author description. You might want to place some links too in here
+                    </p>
+                </section>
+            
+
+            <!-- Share links section -->
+            <section class="share">
+    <h4>Share this post</h4>
+    <a class="icon-twitter" href="http://twitter.com/share?text=深入探索C++对象模型（3）&amp;url=http://malolk.com/2016/12/04/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-3.html"
+        onclick="window.open(this.href, 'twitter-share', 'width=550,height=235');return false;">
+        <span class="hidden">Twitter</span>
+    </a>
+    <a class="icon-facebook" href="https://www.facebook.com/sharer/sharer.php?u=http://malolk.com/2016/12/04/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-3.html"
+        onclick="window.open(this.href, 'facebook-share','width=580,height=296');return false;">
+        <span class="hidden">Facebook</span>
+    </a>
+    <a class="icon-google-plus" href="https://plus.google.com/share?url=http://malolk.com/2016/12/04/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-3.html"
+       onclick="window.open(this.href, 'google-plus-share', 'width=490,height=530');return false;">
+        <span class="hidden">Google+</span>
+    </a>
+</section>
+
+            <!-- Disqus comments -->
+            
+
+        </footer>
+
+    </article>
+
+</main>
+
+    <footer class="site-footer clearfix">
+      <section class="copyright">
+        <a href="">@malolk</a> &copy; 
+               &bull; All rights reserved.
+      </section>
+      <section class="poweredby">Made with Jekyll using 
+        <a href="http://github.com/rosario/kasper">Kasper theme</a>
+      </section>
+    </footer>
+    
+    <script type="text/javascript" src="/assets/js/jquery-1.11.1.min.js"></script>
+    <script type="text/javascript" src="/assets/js/jquery.fitvids.js"></script>
+    <script type="text/javascript" src="/assets/js/index.js"></script>
+
+    <!-- Google Analytics Tracking code -->
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', '']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>   
+</body>
+</html>

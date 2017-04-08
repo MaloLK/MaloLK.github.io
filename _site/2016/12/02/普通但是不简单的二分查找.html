@@ -1,0 +1,123 @@
+<h2 id="二分查找的一个著名的bug">二分查找的一个著名的Bug</h2>
+<p>很多人写二分查找时，使用<code>(left + right)/2</code>来计算mid的位置，但是当输入的数组足够大时，可能会导致<code>left + right</code>溢出，因此应该使用<code>left + (right - left)/2</code>来计算mid的位置。</p>
+
+<!-- more -->
+
+<h2 id="二分两种不同的写法">二分两种不同的写法</h2>
+<p><strong>每次循环使用两次比较</strong></p>
+<pre><code>int binarySearch(const vector&lt;int&gt;&amp; nums, int key)
+{
+    int size = nums.size();
+    if(!size) return -1;
+    int left = 0, right = size - 1;
+    while(left &lt;= right)
+    {
+        int mid = left + (right - left)/2; // left biased when there is only 2 elements
+        if(nums[mid] == key) return mid;
+        if(key &lt; nums[mid]) right = mid - 1;
+        else left = mid + 1;
+    }
+    return -1;
+}
+</code></pre>
+
+<p><strong>每次循环使用一次比较</strong></p>
+<pre><code>// invarient: the key will be in nums[left, right)
+int binarySearch(const vector&lt;int&gt;&amp; nums, int key)
+{
+    int size = nums.size();
+    if(!size) return -1;
+    int left = 0, right = size;
+    // when there is at least two elements in the range [left, right)
+    while(right - left &gt; 1)
+    {
+        int mid = left + (right - left)/2;
+
+        if(key &gt;= nums[mid]) left = mid;
+        else right = mid;
+    }
+    // when there is only one element, i.e., the left points, we need to check 
+    // whether it is equivalent to the key
+    if(key == nums[left]) return left;
+    else return -1;
+}
+</code></pre>
+<p>以上代码中while循环中的比较次数只有一次，但是这并不是说明此种版本的二分查找一定快，取决与key所在的位置。如果key所在的位置偏离中心越远则当前的方法比较次数比较少，但是当key在中心时，这个版本相比上一个版本就会需要循环更多次，需要比较的次数也会更多。而此种版本的优势在于其可扩展性。</p>
+
+<h2 id="求取某个数字在有序数组中出现的次数">求取某个数字在有序数组中出现的次数</h2>
+<p>可以使用两次二分查找求取key在数组中的上限和下限所在的位置。</p>
+
+<pre><code>// we just return the right-most element equal to key, if key exists in nums 
+// invarient: the key will be in nums[left, right)
+int ceilIndex(const vector&lt;int&gt;&amp; nums, int key)
+{
+    int size = nums.size();
+    if(!size) return -1;
+    int left = 0, right = size;
+    // when there is at least two elements in the range [left, right)
+    while(right - left &gt; 1)
+    {
+        int mid = left + (right - left)/2;
+
+        if(key &gt;= nums[mid]) left = mid;
+        else right = mid;
+    }
+    return leftt;
+}
+
+// we just return the left-most element equal to key, if key exists in nums 
+// invarient: the key will be in nums(left, right]
+int floorIndex(const vector&lt;int&gt;&amp; nums, int key)
+{
+    int size = nums.size();
+    if(!size) return -1;
+    // !!! be careful with this initialization
+    int left = -1, right = size - 1;
+    // when there is at least two elements in the range (left, right]
+    while(right - left &gt; 1)
+    {
+        int mid = left + (right - left)/2;
+
+        if(key &lt;= nums[mid]) right = mid;
+        else left = mid;
+    }
+    return right;   
+}
+
+int count(const vector&lt;int&gt;&amp; nums, int key)
+{
+    if(nums.empty()) return 0;
+    int left = floorIndex(nums, key);
+    int right = ceilIndex(nums, key);
+
+    // need to check whether the key has been found
+    if(nums[left] == key &amp;&amp; nums[right] == key) return (right - left + 1);
+    return 0;
+}
+</code></pre>
+
+<h2 id="二分查找的其他应用">二分查找的其他应用</h2>
+<p><strong>查找插入位置</strong>
+比较常见的一个应用是，给定一个数，寻找将其插入到有序数组中的合适位置。这个问题可以使用上述的floorIndex和ceilIndex获取插入的位置。
+<strong>寻找循环有序数组中的最小值</strong>
+一个数组初始是有序的，然后将其随机循环移动，找出数组中最小的值。</p>
+<pre><code>int getMinIndex(const vector&lt;int&gt;&amp; nums)
+{
+    int size = nums.size();
+    if(!size) return -1;
+    // the nums is still sorted
+    if(nums[0] &lt;= nums[size - 1]) return 0;
+    int left = 0, right = size - 1;
+    while(left &lt;= right)
+    {
+        if(left == right) return right;
+        int mid = left + (right - left)/2;
+        // mid is at the second pulse, then squeeze the second pulse
+        if(nums[mid] &lt;= nums[right]) right = mid;
+        // mid is at the first pulse, then suqeeze the first pulse
+        else left = mid + 1;
+    }
+    return -1;
+}
+</code></pre>
+

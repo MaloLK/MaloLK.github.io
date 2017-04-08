@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <title>@malolk - Liu Kai's blog</title>
+    <meta name="description" content="@malolk Liu Kai's blog" />
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="MobileOptimized" content="320" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css" />
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Merriweather:300,700,700italic,300italic|Open+Sans:700,400" />
+    <!-- Customisation  -->
+    <link rel="stylesheet" type="text/css" href="/assets/css/main.css" />
+
+</head>
+<body class="home-template">
+
+    <header class="main-header post-head no-cover">
+    <nav class="main-nav  clearfix">
+        <a class="back-button icon-arrow-left" href="">Home</a>
+        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+    </nav>
+</header>
+
+<main class="content" role="main">
+
+    <article class="post">
+
+        <header class="post-header">
+            <h1 class="post-title">Google的C++编码风格Tips</h1>
+            <section class="post-meta">
+                <time class="post-date" datetime="2016-12-10">10 Dec 2016</time>
+                
+                    on programming
+                
+            </section>
+        </header>
+
+<!--         <header class="post-header">
+            <a id="blog-logo" href="http://localhost:4000">
+                
+                    <span class="blog-title">@malolk</span>
+                
+            </a>
+        </header> -->
+
+        <!-- <span class="post-meta">
+            <time datetime="2016-12-10">10 Dec 2016</time>
+            
+                on programming
+            
+        </span> -->
+
+        <!-- <h1 class="post-title">Google的C++编码风格Tips</h1> -->
+
+        <section class="post-content">
+            <blockquote>
+  <p>摘抄自<a href="https://zh-google-styleguide.readthedocs.io/en/latest/google-cpp-styleguide/">这里</a></p>
+</blockquote>
+
+<h4 id="作用域">作用域</h4>
+
+<p><strong>名字空间</strong> 鼓励在 .cc 文件内使用匿名名字空间。使用具名的名字空间时，其名称可基于项目名或相对路径。禁止使用 using 指示（using-directive）。禁止使用内联命名空间（inline namespace）。</p>
+
+<p><strong>非成员函数、静态成员函数和全局函数</strong></p>
+
+<p>使用静态成员函数或名字空间内的非成员函数，尽量不要用裸的全局函数。</p>
+
+<p><strong>局部变量</strong> 将函数变量尽可能置于最小作用域内，并在变量声明时进行初始化。</p>
+
+<p><strong>静态和全局变量</strong> 禁止使用 class 类型的静态或全局变量：它们会导致难以发现的 bug 和不确定的构造和析构函数调用顺序。不过 constexpr 变量除外，毕竟它们又不涉及动态初始化或析构。</p>
+
+<h4 id="类">类</h4>
+
+<p><strong>构造函数的职责</strong> 不要在构造函数中进行复杂的初始化 (尤其是那些有可能失败或者需要调用虚函数的初始化)。 如果对象需要进行有意义的 (non-trivial) 初始化，考虑使用明确的 Init() 方法或使用工厂模式。</p>
+
+<p><strong>初始化</strong> 如果类中定义了成员变量，则必须在类中为每个类提供初始化函数或定义一个构造函数。若未声明构造函数，则编译器会生成一个默认的构造函数，这有可能导致某些成员未被初始化或被初始化为不恰当的值。</p>
+
+<p>在类成员里面进行初始化是指声明一个成员变量的时候使用一个结构例如<code>int _count = 17</code>或者<code>string _name{"abc"}</code>来替代<code>int _count</code>或者<code>string _name</code>这样的形式。</p>
+
+<p><strong>显式构造函数</strong> 对单个参数的构造函数使用<code>C++</code>关键字<code>explici</code>。除单参数构造函数外，这一规则也适用于除第一个参数以外的其他参数都具有默认参数的构造函数。</p>
+
+<p><strong>可拷贝类型和可移动类型</strong> 如果你的类型需要, 就让它们支持拷贝/移动。否则，就把隐式产生的拷贝和移动函数禁用。
+一般都会将拷贝构造函数给禁掉。如果基类存在拷贝构造函数，那么对于子类来说，如果在实现子类的拷贝构造函数时忘了显示的调用基类的拷贝构造函数，编译器会在我们定义的子类拷贝构造函数中插入调用基类的默认构造函数，而不是基类的对应的拷贝构造函数。</p>
+
+<p>禁掉拷贝构造函数的方法一般是将拷贝构造函数和赋值函数设置为private，且不予定义。设置为private，是为了不让外界用户调用，不予定义则是为了防止友元函数或者成员函数进行拷贝操作。</p>
+
+<p><strong>委派和继承构造函数</strong> 在能够减少重复代码的情况下使用委派和继承构造函数。</p>
+
+<p><strong>结构体 VS. 类</strong> 在能够减少重复代码的情况下使用委派和继承构造函数。
+注意: 类和结构体的成员变量使用不同的命名规则。</p>
+
+<p><strong>继承</strong> 使用组合常常比使用继承更合理。如果使用继承的话，定义为 public 继承。</p>
+
+<p>当重载一个虚函数, 在衍生类中把它明确的声明为 virtual。理论依据：如果省略 virtual 关键字，代码阅读者不得不检查所有父类，以判断该函数是否是虚函数。</p>
+
+<p><strong>多重继承</strong> 真正需要用到多重实现继承的情况少之又少。只在以下情况我们才允许多重继承：最多只有一个基类是非抽象类；其它基类都是以 Interface 为后缀的纯接口类。</p>
+
+<p>只有当所有父类除第一个外都是纯接口类时，才允许使用多重继承。为确保它们是纯接口，这些类必须以 Interface 为后缀。</p>
+
+<p><strong>接口</strong> 接口是指满足特定条件的类，这些类以 Interface 为后缀 (不强制)。
+当一个类满足以下要求时，称之为纯接口：</p>
+<ul>
+  <li>只有纯虚函数 (“=0”) 和静态函数 (除了下文提到的析构函数)。</li>
+  <li>没有非静态数据成员。</li>
+  <li>没有定义任何构造函数. 如果有, 也不能带有参数, 并且必须为 protected。</li>
+  <li>如果它是一个子类, 也只能从满足上述条件并以 Interface 为后缀的类继承。</li>
+</ul>
+
+<p><strong>运算符重载</strong> 除少数特定环境外，不要重载运算符。一般不要重载运算符. 尤其是赋值操作 (operator=) 比较诡异, 应避免重载. 如果需要的话, 可以定义类似 Equals(), CopyFrom() 等函数。</p>
+
+<p><strong>存取控制</strong> 将所有数据成员声明为 private, 并根据需要提供相应的存取函数. 例如, 某个名为<code>foo_</code>的变量, 其取值函数是<code>foo()</code>. 还可能需要一个赋值函数<code>set_foo()</code>.</p>
+
+<p>特例是, 静态常量数据成员 (一般写做<code>kFoo</code>) 不需要是私有成员.</p>
+
+<p>一般在头文件中把存取函数定义成内联函数.</p>
+
+<p><strong>声明顺序</strong> 在类中使用特定的声明顺序:<code>public:</code>在<code>private:</code>之前, 成员函数在数据成员 (变量) 前。
+每个区段内的声明通常按以下顺序:</p>
+<ul>
+  <li>typedefs 和枚举</li>
+  <li>常量</li>
+  <li>构造函数</li>
+  <li>析构函数</li>
+  <li>成员函数, 含静态成员函数</li>
+  <li>数据成员, 含静态数据成员</li>
+</ul>
+
+<p>友元声明应该放在 private 区段. 如果用宏<code>DISALLOW_COPY_AND_ASSIGN</code> 禁用拷贝和赋值, 应当将其置于 private 区段的末尾, 也即整个类声明的末尾. 参见可拷贝类型和可移动类型.</p>
+
+<p>不要在类定义中内联大型函数. 通常, 只有那些没有特别意义或性能要求高, 并且是比较短小的函数才能被定义为内联函数。</p>
+
+<p><strong>编写简短函数</strong> 倾向编写简短, 凝练的函数. 即使一个长函数现在工作的非常好, 一旦有人对其修改, 有可能出现新的问题. 甚至导致难以发现的 bug. 使函数尽量简短, 便于他人阅读和修改代码.</p>
+
+<h4 id="来自-google-的奇技">来自 Google 的奇技</h4>
+
+<p>使用 cpplint.py 检查风格错误。</p>
+
+<h4 id="其他-c-特性">其他 C++ 特性</h4>
+
+<p><strong>引用参数</strong> 所有按引用传递的参数必须加上 const。（这个算是Google code中的硬性规定）</p>
+
+<p><strong>右值引用</strong> 只在定义移动构造函数与移动赋值操作时使用右值引用. 不要使用 std::forward。</p>
+
+<p><strong>函数重载</strong> 若要用好函数重载，最好能让读者一看调用点（call site）就胸有成竹，不用花心思猜测调用的重载函数到底是哪一种。该规则适用于构造函数。</p>
+
+<p><strong>缺省参数</strong> 我们不允许使用缺省函数参数，少数极端情况除外。尽可能改用函数重载。
+除了以下情况，我们要求必须显式提供所有参数。
+其一，位于 .cc 文件里的静态函数或匿名空间函数，毕竟都只能在局部文件里调用该函数了。
+其二，可以在构造函数里用缺省参数，毕竟不可能取得它们的地址。
+其三，可以用来模拟变长数组。</p>
+
+<p><strong>变长数组和 alloca()</strong> 我们不允许使用变长数组和<code>alloca()</code>。改用更安全的分配器<code>（allocator）</code>，就像 <code>std::vector</code> 或 <code>std::unique_ptr&lt;T[]&gt;</code>。</p>
+
+<p><strong>友元</strong> 我们允许合理的使用友元类及友元函数。
+通常友元应该定义在同一文件内, 避免代码读者跑到其它文件查找使用该私有成员的类. 经常用到友元的一个地方是将 FooBuilder 声明为 Foo 的友元, 以便 FooBuilder 正确构造 Foo 的内部状态, 而无需将该状态暴露出来. 某些情况下, 将一个单元测试类声明成待测类的友元会很方便。</p>
+
+<p><strong>异常</strong> 我们不使用 C++ 异常。理由如下。</p>
+<ul>
+  <li>异常会彻底扰乱程序的执行流程并难以判断，函数也许会在您意料不到的地方返回。您或许会加一大堆何时何处处理异常的规定来降低风险，然而开发者的记忆负担更重了。</li>
+  <li>异常安全需要RAII和不同的编码实践. 要轻松编写出正确的异常安全代码需要大量的支持机制. 更进一步地说, 为了避免读者理解整个调用表, 异常安全必须隔绝从持续状态写到 “提交” 状态的逻辑.</li>
+  <li>滥用异常会变相鼓励开发者去捕捉不合时宜，或本来就已经没法恢复的「伪异常」。比如，用户的输入不符合格式要求时，也用不着抛异常。如此之类的伪异常列都列不完。</li>
+</ul>
+
+<p><strong>运行时类型识别</strong> 我们禁止使用 RTTI.在运行时判断类型通常意味着设计问题. 如果你需要在运行期间确定一个对象的类型, 这通常说明你需要考虑重新设计你的类.随意地使用 RTTI 会使你的代码难以维护. 它使得基于类型的判断树或者 switch 语句散布在代码各处. 如果以后要进行修改, 你就必须检查它们.RTTI 有合理的用途但是容易被滥用, 因此在使用时请务必注意. 在单元测试中可以使用 RTTI, 但是在其他代码中请尽量避免.</p>
+
+<p>替代方案： 使用虚函数、使用访问者设计模式和使用<code>dynamic_cast</code>。</p>
+
+<p><strong>类型转换</strong> 使用 C++ 的类型转换, 如 <code>static_cast&lt;&gt;()</code>. 不要使用 <code>int y = (int)x</code> 或 <code>int y = int(x)</code> 等转换方式。
+不要使用 C 风格类型转换. 而应该使用 C++ 风格。</p>
+<ul>
+  <li>用 <code>static_cast</code> 替代 C 风格的值转换, 或某个类指针需要明确的向上转换为父类指针时。</li>
+  <li>用 <code>const_cast</code> 去掉 <code>const</code> 限定符。</li>
+  <li>用 <code>reinterpret_cast</code> 指针类型和整型或其它指针之间进行不安全的相互转换. 仅在你对所做一切了然于心时使用.这个操作符能够在非相关的类型之间转换. 操作结果只是简单的从一个指针到别的指针的值的 二进制拷贝. 在类型之间指向的内容不做任何类型的检查和转换。</li>
+  <li><code>dynamic_cast</code>用于安全的向下转换，当不能进行安全转换时，对于指针则返回NULL, 对于引用类型则会抛出<code>bad cast exception</code>。</li>
+</ul>
+
+<p><strong>流</strong> 只在记录日志时使用流。不要使用流, 除非是日志接口需要. 使用<code>printf</code>之类的代替。
+使用流还有很多利弊, 但代码一致性胜过一切. 不要在代码中使用流.</p>
+
+<p><strong>前置自增和自减</strong> 对于迭代器和其他模板对象使用前缀形式<code>(++i)</code>的自增, 自减运算符.
+不考虑返回值的话, 前置自增 (++i) 通常要比后置自增 (i++) 效率更高. 因为后置自增 (或自减) 需要对表达式的值 i 进行一次拷贝.</p>
+
+<p><strong>const 用法</strong> 我们强烈建议你在任何可能的情况下都要使用<code>const</code>. 此外有时改用<code>C++11</code>推出的 <code>constexpr</code>更好。
+建议使用const的地方。</p>
+<ul>
+  <li>如果函数不会修改传你入的引用或指针类型参数, 该参数应声明为<code>const</code>.</li>
+  <li>尽可能将函数声明为 const. 访问函数应该总是 const. 其他不会修改任何数据成员, 未调用非 const 函数, 不会返回数据成员非 const 指针或引用的函数也应该声明成 const.</li>
+  <li>如果数据成员在对象构造之后不再发生变化, 可将其定义为 const.</li>
+  <li>尽可能将函数声明为 const. 访问函数应该总是 const. 其他不会修改任何数据成员, 未调用非 const 函数, 不会返回数据成员非 const 指针或引用的函数也应该声明成 const.</li>
+  <li>如果数据成员在对象构造之后不再发生变化, 可将其定义为 const.</li>
+</ul>
+
+<p><strong>constexpr 用法</strong> 在 C++11 里，用 constexpr 来定义真正的常量，或实现常量初始化。</p>
+
+<p><strong>整型</strong> 使用断言来指出变量为非负数, 而不是使用无符号型!</p>
+
+<p>C++ 内建整型中, 仅使用 int. 如果程序中需要不同大小的变量, 可以使用 <code>&lt;stdint.h&gt;</code> 中长度精确的整型, 如 <code>int16_t</code>.如果您的变量可能不小于 <code>2^31 (2GiB)</code>, 就用 64 位变量比如 <code>int64_t</code>. 此外要留意，哪怕您的值并不会超出 int 所能够表示的范围，在计算过程中也可能会溢出。所以拿不准时，干脆用更大的类型。</p>
+
+<p>不要使用 <code>uint32_t</code> 等无符号整型, 除非你是在表示一个位组而不是一个数值, 或是你需要定义二进制补码溢出. 尤其是不要为了指出数值永不会为负, 而使用无符号类型. 相反, 你应该使用断言来保护数据.</p>
+
+<p><strong>64 位下的可移植性</strong> 你要非常小心的对待结构体对齐, 尤其是要持久化到磁盘上的结构体。在 64 位系统中, 任何含有 <code>int64_t/uint64_t</code> 成员的类/结构体, 缺省都以 8 字节在结尾对齐. 如果 32 位和 64 位代码要共用持久化的结构体, 需要确保两种体系结构下的结构体对齐一致. 大多数编译器都允许调整结构体对齐. gcc 中可使用 <code>__attribute__((packed))</code>。</p>
+
+<p><strong>预处理宏</strong> 使用宏时要非常谨慎, 尽量以内联函数, 枚举和常量代替之。
+下面给出的用法模式可以避免使用宏带来的问题; 如果你要宏, 尽可能遵守:</p>
+<ul>
+  <li>不要在 .h 文件中定义宏.</li>
+  <li>在马上要使用时才进行 #define, 使用后要立即 #undef.</li>
+  <li>不要只是对已经存在的宏使用#undef，选择一个不会冲突的名称；</li>
+  <li>不要试图使用展开后会导致 C++ 构造不稳定的宏, 不然也至少要附上文档说明其行为.</li>
+  <li>不要用 ## 处理函数，类和变量的名字。</li>
+</ul>
+
+<p><strong>nullptr 和 NULL</strong> 对于指针 (地址值), 到底是用 0, NULL 还是 nullptr. C++11 项目用 nullptr; C++03 项目则用 NULL, 毕竟它看起来像指针。实际上，一些 C++ 编译器对 NULL 的定义比较特殊，可以输出有用的警告，特别是 sizeof(NULL) 就和 sizeof(0) 不一样。</p>
+
+<p><strong>sizeof</strong> 尽可能用 <code>sizeof(varname)</code> 代替 <code>sizeof(type)</code>。使用<code>sizeof(varname)</code> 是因为当代码中变量类型改变时会自动更新。</p>
+
+<p><strong>auto</strong> 用 auto 绕过烦琐的类型名，只要可读性好就继续用，别用在局部变量之外的地方。</p>
+
+<p><strong>Lambda 表达式</strong> 适当使用 lambda 表达式。别用默认 lambda 捕获，所有捕获都要显式写出来。</p>
+
+<h4 id="命名约定">命名约定</h4>
+
+<p><strong>通用命名规则</strong> 函数命名，变量命名，文件命名要有描述性；少用缩写。</p>
+
+<p><strong>文件命名</strong> 文件名要全部小写, 可以包含下划线 (<em>) 或连字符 (-). 按项目约定来. 如果并没有项目约定，”</em>” 更好。
+C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名更加明确.
+内联函数必须放在 .h 文件中. 如果内联函数比较短, 就直接放在 .h 中.</p>
+
+<p><strong>类型命名</strong> 类型名称的每个单词首字母均大写, 不包含下划线: MyExcitingClass, MyExcitingEnum.</p>
+
+<p><strong>变量命名</strong> 变量名一律小写, 单词之间用下划线连接. 类的成员变量以下划线结尾, 但结构体的就不用，如<code>::a_local_variable</code>, <code>a_struct_data_member</code>, <code>a_class_data_member_</code>.</p>
+<ul>
+  <li>类数据成员：不管是静态的还是非静态的，类数据成员都可以和普通变量一样, 但要接下划线。</li>
+  <li>结构体变量:不管是静态的还是非静态的，结构体数据成员都可以和普通变量一样, 不用像类那样接下划线。</li>
+  <li>对全局变量没有特别要求, 少用就好, 但如果你要用, 可以用 <code>g_</code> 或其它标志作为前缀, 以便更好的区分局部变量.</li>
+</ul>
+
+<p><strong>常量命名</strong> 在全局或类里的常量名称前加 k: <code>kDaysInAWeek</code>. 且除去开头的 k 之外每个单词开头字母均大写。</p>
+
+<p><strong>函数命名</strong> 常规函数: 函数名的每个单词首字母大写, 没有下划线。
+取值和设值函数: 取值（Accessors）和设值（Mutators）函数要与存取的变量名匹配。</p>
+
+<p><strong>名字空间命名</strong> 名字空间用小写字母命名, 并基于项目名称和目录结构: <code>google_awesome_project</code>。</p>
+
+<p><strong>枚举命名</strong> 枚举的命名应当和 常量 或 宏 一致: <code>kEnumName</code> 或是 <code>ENUM_NAME</code>.</p>
+
+<p><strong>宏命名</strong> 像这样命名: <code>MY_MACRO_THAT_SCARES_SMALL_CHILDREN</code>。</p>
+
+<p><strong>命名规则的特例</strong> 如果你命名的实体与已有 C/C++ 实体相似, 可参考现有命名策略.
+<code>bigopen()</code> 参照　<code>open()</code>, <code>uint</code> 使用　typedef, <code>LONGLONG_MAX</code> 参照常量<code>INT_MAX</code>。</p>
+
+<h4 id="注释">注释</h4>
+
+<p><strong>注释风格</strong> 使用 <code>//</code> 或 <code>/* */</code>, 统一就好.</p>
+
+<p><strong>文件注释</strong> 在每一个文件开头加入版权公告, 然后是文件内容描述.
+每个文件都应该包含以下项, 依次是:</p>
+<ul>
+  <li>版权声明 (比如, Copyright 2008 Google Inc.)</li>
+  <li>许可证. 为项目选择合适的许可证版本 (比如, Apache 2.0, BSD, LGPL, GPL)</li>
+  <li>作者: 标识文件的原始作者.</li>
+</ul>
+
+<p><strong>类注释</strong> 每个类的定义都要附带一份注释, 描述类的功能和用法.</p>
+
+<p>__ 函数注释__ 函数声明处注释描述函数功能; 定义处描述函数实现.</p>
+
+<p><strong>变量注释</strong> 通常变量名本身足以很好说明变量用途. 某些情况下, 也需要额外的注释说明.</p>
+
+<p><strong>实现注释</strong> 对于代码中巧妙的, 晦涩的, 有趣的, 重要的地方加以注释.</p>
+
+<p><strong>标点, 拼写和语法</strong> 注意标点, 拼写和语法; 写的好的注释比差的要易读的多.</p>
+
+<p><strong>TODO 注释</strong> 对那些临时的, 短期的解决方案, 或已经够好但仍不完美的代码使用 TODO 注释.</p>
+
+<p><strong>弃用注释</strong> 通过弃用注释（<code>DEPRECATED</code> comments）以标记某接口点（interface points）已弃用。</p>
+
+<h4 id="格式">格式</h4>
+
+<p><strong>行长度</strong> 每一行代码字符数不超过 80.</p>
+
+<p><strong>空格还是制表位</strong> 只使用空格, 每次缩进 2 个空格.</p>
+
+<p><strong>函数声明与定义</strong> 返回类型和函数名在同一行, 参数也尽量放在同一行，如果放不下就对形参分行。</p>
+<ul>
+  <li>如果返回类型和函数名在一行放不下，分行。</li>
+  <li>如果返回类型那个与函数声明或定义分行了，不要缩进。</li>
+  <li>左圆括号总是和函数名在同一行;</li>
+  <li>函数名和左圆括号间没有空格;</li>
+  <li>圆括号与参数间没有空格;</li>
+  <li>左大括号总在最后一个参数同一行的末尾处;</li>
+  <li>如果其它风格规则允许的话，右大括号总是单独位于函数最后一行，或者与左大括号同一行。</li>
+  <li>右大括号和左大括号间总是有一个空格;</li>
+  <li>函数声明和定义中的所有形参必须有命名且一致;</li>
+  <li>所有形参应尽可能对齐;</li>
+  <li>缺省缩进为 2 个空格;</li>
+  <li>换行后的参数保持 4 个空格的缩进;</li>
+</ul>
+
+<p><strong>Lambda 表达式</strong> 其它函数怎么格式化形参和函数体，Lambda 表达式就怎么格式化；捕获列表同理。</p>
+
+<p><strong>函数调用</strong> 要么一行写完函数调用，要么在圆括号里对参数分行，要么参数另起一行且缩进四格。如果没有其它顾虑的话，尽可能精简行数，比如把多个参数适当地放在同一行里。</p>
+
+<p><strong>列表初始化格式</strong> 怎么格式化函数调用，就怎么格式化:ref:braced_initializer_list。</p>
+
+<p><strong>条件语句</strong> 倾向于不在圆括号内使用空格. 关键字 if 和 else 另起一行.
+注意所有情况下 if 和左圆括号间都有个空格. 右圆括号和左大括号之间也要有个空格</p>
+
+<p><strong>循环和开关选择语句</strong> switch 语句可以使用大括号分段，以表明 cases 之间不是连在一起的。在单语句循环里，括号可用可不用。空循环体应使用 {} 或 continue.</p>
+
+<p>如果有不满足 case 条件的枚举值, switch 应该总是包含一个 default 匹配 (如果有输入值没有 case 去处理, 编译器将报警). 如果 default 应该永远执行不到, 简单的加条 <code>assert(false)</code></p>
+
+<p>空循环体应使用 {} 或 continue, 而不是一个简单的分号.</p>
+
+<p><strong>指针和引用表达式</strong> 句点或箭头前后不要有空格. 指针/地址操作符 (*, &amp;) 之后不能有空格.</p>
+
+<p><strong>布尔表达式</strong> 如果一个布尔表达式超过 标准行宽, 断行方式要统一一下.</p>
+
+<p><strong>函数返回值</strong> return 表达式里时没必要都用圆括号。</p>
+
+<p><strong>变量及数组初始化</strong> 用 =, () 和 {} 均可. 为了强制禁用 <code>std::initializer_list</code> 构造函数，请改用括号。</p>
+
+<p><strong>预处理指令</strong> 预处理指令不要缩进, 从行首开始.</p>
+
+<p><strong>类格式</strong> 访问控制块的声明依次序是 public:, protected:, private:, 每次缩进 1 个空格.</p>
+
+<p><strong>构造函数初始值列表</strong> 构造函数初始值列表放在同一行或按四格缩进并排几行.</p>
+
+<p><strong>名字空间格式化</strong> 名字空间内容不缩进. 声明嵌套命名空间时，每命名空间都独立成行，也不需要缩进。</p>
+
+<p><strong>水平留白</strong> 水平留白的使用因地制宜. 永远不要在行尾添加没意义的留白.</p>
+
+<p><strong>垂直留白</strong> 垂直留白越少越好.</p>
+
+
+        </section>
+
+        
+
+        <footer class="post-footer">
+            <!-- If we want to display author's name and bio -->
+            
+                <figure class="author-image">
+                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <span class="hidden">Liu Kai's Picture</span></a>
+                </figure>
+                <section class="author">
+                    <!-- Author Name -->
+                    <h4> Liu Kai </h4>
+                    <!-- Author Bio -->
+                    <p>
+                        Here goes the author description. You might want to place some links too in here
+                    </p>
+                </section>
+            
+
+            <!-- Share links section -->
+            <section class="share">
+    <h4>Share this post</h4>
+    <a class="icon-twitter" href="http://twitter.com/share?text=Google的C++编码风格Tips&amp;url=http://malolk.com/2016/12/10/Google%E7%9A%84C++%E7%BC%96%E7%A0%81%E9%A3%8E%E6%A0%BCTips.html"
+        onclick="window.open(this.href, 'twitter-share', 'width=550,height=235');return false;">
+        <span class="hidden">Twitter</span>
+    </a>
+    <a class="icon-facebook" href="https://www.facebook.com/sharer/sharer.php?u=http://malolk.com/2016/12/10/Google%E7%9A%84C++%E7%BC%96%E7%A0%81%E9%A3%8E%E6%A0%BCTips.html"
+        onclick="window.open(this.href, 'facebook-share','width=580,height=296');return false;">
+        <span class="hidden">Facebook</span>
+    </a>
+    <a class="icon-google-plus" href="https://plus.google.com/share?url=http://malolk.com/2016/12/10/Google%E7%9A%84C++%E7%BC%96%E7%A0%81%E9%A3%8E%E6%A0%BCTips.html"
+       onclick="window.open(this.href, 'google-plus-share', 'width=490,height=530');return false;">
+        <span class="hidden">Google+</span>
+    </a>
+</section>
+
+            <!-- Disqus comments -->
+            
+
+        </footer>
+
+    </article>
+
+</main>
+
+    <footer class="site-footer clearfix">
+      <section class="copyright">
+        <a href="">@malolk</a> &copy; 
+               &bull; All rights reserved.
+      </section>
+      <section class="poweredby">Made with Jekyll using 
+        <a href="http://github.com/rosario/kasper">Kasper theme</a>
+      </section>
+    </footer>
+    
+    <script type="text/javascript" src="/assets/js/jquery-1.11.1.min.js"></script>
+    <script type="text/javascript" src="/assets/js/jquery.fitvids.js"></script>
+    <script type="text/javascript" src="/assets/js/index.js"></script>
+
+    <!-- Google Analytics Tracking code -->
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', '']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>   
+</body>
+</html>

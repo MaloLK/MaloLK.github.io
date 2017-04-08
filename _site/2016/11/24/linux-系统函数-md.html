@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <title>@malolk - Liu Kai's blog</title>
+    <meta name="description" content="@malolk Liu Kai's blog" />
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="MobileOptimized" content="320" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css" />
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Merriweather:300,700,700italic,300italic|Open+Sans:700,400" />
+    <!-- Customisation  -->
+    <link rel="stylesheet" type="text/css" href="/assets/css/main.css" />
+
+</head>
+<body class="home-template">
+
+    <header class="main-header post-head no-cover">
+    <nav class="main-nav  clearfix">
+        <a class="back-button icon-arrow-left" href="">Home</a>
+        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+    </nav>
+</header>
+
+<main class="content" role="main">
+
+    <article class="post">
+
+        <header class="post-header">
+            <h1 class="post-title">linux 系统函数</h1>
+            <section class="post-meta">
+                <time class="post-date" datetime="2016-11-24">24 Nov 2016</time>
+                
+                    on programming
+                
+            </section>
+        </header>
+
+<!--         <header class="post-header">
+            <a id="blog-logo" href="http://localhost:4000">
+                
+                    <span class="blog-title">@malolk</span>
+                
+            </a>
+        </header> -->
+
+        <!-- <span class="post-meta">
+            <time datetime="2016-11-24">24 Nov 2016</time>
+            
+                on programming
+            
+        </span> -->
+
+        <!-- <h1 class="post-title">linux 系统函数</h1> -->
+
+        <section class="post-content">
+            <h4 id="exit-和-_exit的区别">exit() 和 _exit()的区别</h4>
+<blockquote>
+  <p>参考 http://stackoverflow.com/questions/5422831/what-is-the-difference-between-using-exit-exit-in-a-conventional-linux-fo</p>
+</blockquote>
+
+<p>在阅读redis源码的过程中，为了防止在后台保存rdb文件的子进程退出时影响父进程的文件操作，程序中使用的是<code>_exit()</code>，而非我们常见的<code>exit()</code>。</p>
+
+<p>为什么子进程使用<code>exit()</code>退出会影响父进程的文件操作？
+在linux的man中可以看到<code>exit()</code>函数在正常退出之前还会进行额外的操作，包括反向执行<code>atexit()</code>注册的函数，将使用<code>tmpfile()</code>创建的文件删除。但是对于linux系统来说，它还会将标准输出流stdio和文件流进行flush操作，即将缓冲区中的内容写入终端或者写入文件。会有这样的行为，是因为<strong>stdio和文件流等都是使用C中的库函数实现，拥有用户空间的缓冲区，当fork子进程时子进程会以copy-on-write的方式将其拷贝一份</strong>，使用子进程会将复制的stdio缓冲区和拷贝的文件流中的缓冲区进行冲洗操作输出到终端或者写入文件中。</p>
+
+<p>编写下面的程序进行验证。</p>
+<pre><code>#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;sys/wait.h&gt;
+int main() {
+    FILE* f = fopen("temp.test", "w");
+    const char *text = "abcd";
+    fwrite(text, 1, 4, f);
+    int pid = 0;
+    if((pid = fork()) == 0) {   
+        /* child process */
+        printf("child process flushed this user-space stream");
+        //_exit(0);
+        exit(0);
+    } else {
+        wait(NULL);
+        /* parent process */
+        printf("parent process");
+    }   
+    fclose(f);
+}
+</code></pre>
+
+<p>另外值得一提的是，一般C中的<code>fflush()</code>函数是将用户空间的缓冲区冲洗到系统缓冲区，而使用<code>fsync</code>是将系统缓冲区中的内容写入到磁盘。</p>
+
+<h4 id="select-vs-poll-vs-epoll">select() V.S. poll() V.S. epoll()</h4>
+<p>三者都是同步IO。<strong>区别同步IO和异步IO的最直接方法是看调用这个函数时是否会将当前进程阻塞</strong>，很显然这三个函数都会阻塞当前进程，所以是同步IO，可以参考Unix网络编程。</p>
+
+<p><strong>epoll 为什么高效？</strong></p>
+<ul>
+  <li>要监听的文件描述符只需在初始加入到监听列表时需要加入到epoll内部管理的红黑树中，后续如果不取消则将会一直被epoll进行监听，而select则会在每次调用时需要重新设置，如果需要监听的文件描述符比较多则需要每次从用户态拷贝到内核态，poll不需要重新设置。</li>
+  <li>在调用epoll_wait的过程中，首先检查文件描述符就绪列表是否为空，如果不为空则直接返回，否则睡眠进行进程调度。在等待的过程中如果有事件到来，就会在相应的事件的回调函数中将此文件描述符加入到就绪列表中并将这个进程唤醒（当然超时也会将这个进程唤醒），接着epoll_wait检查就绪链表是否为空，如果不为空则将其长度返回，因此复杂度是O(1)。而对于select/poll，则每次有新的事件，则需要将所有监听的文件描述符都检查一遍，复杂度是O(N)。</li>
+  <li>在向epoll中加入新的需要监听的文件描述符时，使用红黑树可以快速的进行查找和插入操作。
+另外，在返回就绪事件的相关结构体时，epoll/select/poll都需要从内核态到用户态的拷贝。最后值得注意的一点是，epoll_ctl函数是系统调用函数，因此对于大量短连接的场景里，epoll的性能由于需要频繁的调用系统调用函数而会受到限制。</li>
+</ul>
+
+<p><strong>值得清楚的epoll事件</strong></p>
+<ul>
+  <li>EPOLLIN 表示对方连接发来数据，或者对端关闭连接</li>
+  <li>EPOLLOUT 表示可写</li>
+  <li>EPOLLERR 表示对应的文件描述符发生错误</li>
+  <li>EPOLLHUP 表示对应的文件描述符被挂断，对应的文件描述符可能被关闭
+另外，对端在正常关闭时，比如使用close()或者CTRL+C，会触发EPOLLIN和EPOLLRDHUP，但是不触发EPOLLERR和EPOLLHUP。
+对于对端的异常断开，则不会触发任何事件，如果再向sock中写数据则会出现EPOLLERR错误。</li>
+</ul>
+
+<p><strong>ET模式和LT模式的区别</strong>
+如果当前到达的事件没有处理完毕，LT模式会再次将这个事件返回，而ET只有所监视的文件描述符出现新的事件时才会返回。</p>
+
+        </section>
+
+        
+
+        <footer class="post-footer">
+            <!-- If we want to display author's name and bio -->
+            
+                <figure class="author-image">
+                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <span class="hidden">Liu Kai's Picture</span></a>
+                </figure>
+                <section class="author">
+                    <!-- Author Name -->
+                    <h4> Liu Kai </h4>
+                    <!-- Author Bio -->
+                    <p>
+                        Here goes the author description. You might want to place some links too in here
+                    </p>
+                </section>
+            
+
+            <!-- Share links section -->
+            <section class="share">
+    <h4>Share this post</h4>
+    <a class="icon-twitter" href="http://twitter.com/share?text=linux 系统函数&amp;url=http://malolk.com/2016/11/24/linux-%E7%B3%BB%E7%BB%9F%E5%87%BD%E6%95%B0-md.html"
+        onclick="window.open(this.href, 'twitter-share', 'width=550,height=235');return false;">
+        <span class="hidden">Twitter</span>
+    </a>
+    <a class="icon-facebook" href="https://www.facebook.com/sharer/sharer.php?u=http://malolk.com/2016/11/24/linux-%E7%B3%BB%E7%BB%9F%E5%87%BD%E6%95%B0-md.html"
+        onclick="window.open(this.href, 'facebook-share','width=580,height=296');return false;">
+        <span class="hidden">Facebook</span>
+    </a>
+    <a class="icon-google-plus" href="https://plus.google.com/share?url=http://malolk.com/2016/11/24/linux-%E7%B3%BB%E7%BB%9F%E5%87%BD%E6%95%B0-md.html"
+       onclick="window.open(this.href, 'google-plus-share', 'width=490,height=530');return false;">
+        <span class="hidden">Google+</span>
+    </a>
+</section>
+
+            <!-- Disqus comments -->
+            
+
+        </footer>
+
+    </article>
+
+</main>
+
+    <footer class="site-footer clearfix">
+      <section class="copyright">
+        <a href="">@malolk</a> &copy; 
+               &bull; All rights reserved.
+      </section>
+      <section class="poweredby">Made with Jekyll using 
+        <a href="http://github.com/rosario/kasper">Kasper theme</a>
+      </section>
+    </footer>
+    
+    <script type="text/javascript" src="/assets/js/jquery-1.11.1.min.js"></script>
+    <script type="text/javascript" src="/assets/js/jquery.fitvids.js"></script>
+    <script type="text/javascript" src="/assets/js/index.js"></script>
+
+    <!-- Google Analytics Tracking code -->
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', '']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>   
+</body>
+</html>
