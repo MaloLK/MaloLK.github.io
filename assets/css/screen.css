@@ -888,15 +888,20 @@ body:not(.post-template) .post-title {
     max-width: 100%;
     height: auto;
     margin: 0 auto;
-    padding: 0.6em 0;
+    padding: 0.6rem 0;
+    text-align: center;
 }
 
+.post-content {
+    padding-top: 2rem;
+}
 /* Break out larger images to be wider than the main text column
    the class is applied with jQuery */
 .post-content .full-img {
-    width: 126%;
-    max-width: none;
-    margin: 0 -13%;
+    width: 100%;
+    max-width: 650px;
+    margin: auto;
+    text-align: center;
 }
 
 /* The author credit area after the post */

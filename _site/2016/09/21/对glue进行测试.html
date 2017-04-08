@@ -69,7 +69,7 @@
 
 <h5 id="测试结果">测试结果</h5>
 
-<center><img src="/assets/images/throughput-performance.bmp" style="width: 700px;" /></center>
+<p><img src="/assets/images/throughput-performance.bmp" alt="" /></p>
 
 <p>从图中可以看出， 随着并发的clients的数目增加，吞吐量有所下降，可以归结于epoll的内部实现，活动的clients增加会导致epoll_wait返回时需要从内核拷贝到用户态的文件描述符信息增加，同时，在一次循环中需要处理的事件数量增加，因此处理事件时间变长，但是由于用户数增加，所传送数据也会增加，因此整个的吞吐量也不会太低。从图中可以看到，当客户端并发连接数为20000时，ping-pong server也有将近1GiB/s的吞吐量。</p>
 
@@ -80,9 +80,9 @@
 
 <h5 id="测试结果-1">测试结果</h5>
 
-<center><img src="/assets/images/event-process-100-clients.bmp" style="width: 700px;" /></center>
+<p><img src="/assets/images/event-process-100-clients.bmp" alt="" /></p>
 
-<center><img src="/assets/images/event-process-1000-clients.bmp" style="width: 700px;" /></center>
+<p><img src="/assets/images/event-process-1000-clients.bmp" alt="" /></p>
 
 <p>通过上面两幅图可以看出，glue的事件处理时间在100和1000个clients中均少于libevent处理相应事件所需要的时间。</p>
 

@@ -58,11 +58,9 @@
         <!-- <h1 class="post-title">C/C++内存管理</h1> -->
 
         <section class="post-content">
-            <hr />
+            <h4 id="linux虚拟地址空间布局">Linux虚拟地址空间布局</h4>
 
-<h4 id="linux虚拟地址空间布局">Linux虚拟地址空间布局</h4>
-
-<center><img src="/assets/images/memory-layout.jpg" style="width: 700px;" /></center>
+<p><img src="/assets/images/memory-layout.jpg" alt="" /></p>
 
 <p>虚拟地址空间分为两块区域：其中地址较高的块区域为内核进程地址区域，所有的虚拟地址进程中的内核进程地址区域映射的物理地址是一样的；较低地址的一块区域是用户进程虚拟地址区域，不同的进程通过页表映射的物理地址是不一样的。</p>
 
@@ -104,7 +102,7 @@ BSS段中在可执行文件中不会为变量预先分配空间，只会记录�
 
 <p>从上面的描述可以看出new操作符不管第一步中获得的地址的来源是什么，只要内存地址是有效的则可以在其上调用对象构造函数构造对象。可以试着在栈上空间中构造对象。</p>
 
-<center><img src="/assets/images/C++_memory01.png" style="width: 700px;" /></center>
+<p><img src="/assets/images/C++_memory01.png" alt="" /></p>
 
 <p>从程序的注释中可以印证我们之前的描述。</p>
 
