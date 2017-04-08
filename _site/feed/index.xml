@@ -3,11 +3,8 @@
   <channel>
     <title></title>
     <description>Liu Kai's blog</description>
-    <link>http://localhost:4000/</link>
-    <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Sat, 08 Apr 2017 18:19:23 +0800</pubDate>
-    <lastBuildDate>Sat, 08 Apr 2017 18:19:23 +0800</lastBuildDate>
-    <generator>Jekyll v3.4.3</generator>
+    <link>http://localhost:4000//</link>
+    <atom:link href="http://localhost:4000//feed/index.xml" rel="self" type="application/rss+xml" />
     
       <item>
         <title>Memcached中的线程模型和命令处理流程</title>
@@ -71,16 +68,8 @@
 &lt;/ol&gt;
 </description>
         <pubDate>Sun, 15 Jan 2017 00:42:00 +0800</pubDate>
-        <link>http://localhost:4000/2017/01/15/Memcached%E4%B8%AD%E7%9A%84%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%8F%8A%E5%91%BD%E4%BB%A4%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2017/01/15/Memcached%E4%B8%AD%E7%9A%84%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%8F%8A%E5%91%BD%E4%BB%A4%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.html</guid>
-        
-        <category>memcached</category>
-        
-        <category>event-based</category>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2017/01/15/Memcached%E4%B8%AD%E7%9A%84%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%8F%8A%E5%91%BD%E4%BB%A4%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2017/01/15/Memcached%E4%B8%AD%E7%9A%84%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B%E5%8F%8A%E5%91%BD%E4%BB%A4%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.html</guid>
       </item>
     
       <item>
@@ -133,18 +122,8 @@
 &lt;p&gt;由上述可以知道，当hashtable开始进行扩展时，它会将所有其他会操作hashtable的线程暂停，此时将不会有不安全的操作发生。当将&lt;code&gt;primary_hashtable&lt;/code&gt;和&lt;code&gt;old_hashtable&lt;/code&gt;切换完毕后，对hashtable的访问将会自动判别item在哪个hashtable中。值得说的是，对hashtable的并发访问使用的是段锁，所谓段锁就是hashtable中的多个bucket的并发访问由一个锁访问。这里需要注意的是在进行迁移过程中，迁移线程转移一个bucket时是使用的是这个bucket的序号作为hash_value来获得段锁：&lt;code&gt;item_lock = item_trylock(expand_bucket)&lt;/code&gt;。由于有可能当前的bucket中有其他的worker线程正在访问里面的item，所以需要迁移bucket时需要加锁，但是这里用的是桶的序号(expand_bucket)来获得锁，那么这个锁和使用桶内的item获得的锁是同一个锁吗？答案是：是的。原因是这样的：在item_get函数中使用的是item中key的hash值来获得锁，在源码中的设计是这样的，桶的个数是N个，段锁的个数是M个，且保证M小于N，由于item选择桶是根据取其hash值低N位，即&lt;code&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; N - 1)&lt;/code&gt;，因此当使用bucket序号获取锁时相当于是&lt;code&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; N - 1) &amp;amp; (1 &amp;lt;&amp;lt; M - 1)&lt;/code&gt;，由于N &amp;gt; M,因此可以简化为&lt;code&gt;hash&amp;amp;(1 &amp;lt;&amp;lt; M - 1)&lt;/code&gt;,　跟使用item_get获取锁的方式是一样的，所以如果在迁移过程中，使用bucket序号获得对应的锁后，该bucket中的item将因暂时无法获得锁而阻塞，从而保证hashtable扩展的线程安全。&lt;/p&gt;
 </description>
         <pubDate>Fri, 13 Jan 2017 00:42:00 +0800</pubDate>
-        <link>http://localhost:4000/2017/01/13/Memcached%E4%B8%AD%E7%9A%84LRU%E5%92%8CHashtable.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2017/01/13/Memcached%E4%B8%AD%E7%9A%84LRU%E5%92%8CHashtable.html</guid>
-        
-        <category>memcached</category>
-        
-        <category>LRU</category>
-        
-        <category>hashtable</category>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2017/01/13/Memcached%E4%B8%AD%E7%9A%84LRU%E5%92%8CHashtable.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2017/01/13/Memcached%E4%B8%AD%E7%9A%84LRU%E5%92%8CHashtable.html</guid>
       </item>
     
       <item>
@@ -209,18 +188,8 @@ while (true) {
 Ref: http://neopythonic.blogspot.com/2011/08/compare-and-set-in-memcache.html&lt;/p&gt;
 </description>
         <pubDate>Thu, 12 Jan 2017 00:42:00 +0800</pubDate>
-        <link>http://localhost:4000/2017/01/12/Memcached%E4%B8%AD%E7%9A%84slabs%E5%92%8Ccas%E7%9A%84%E4%BD%9C%E7%94%A8.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2017/01/12/Memcached%E4%B8%AD%E7%9A%84slabs%E5%92%8Ccas%E7%9A%84%E4%BD%9C%E7%94%A8.html</guid>
-        
-        <category>memcached</category>
-        
-        <category>memory</category>
-        
-        <category>CAS</category>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2017/01/12/Memcached%E4%B8%AD%E7%9A%84slabs%E5%92%8Ccas%E7%9A%84%E4%BD%9C%E7%94%A8.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2017/01/12/Memcached%E4%B8%AD%E7%9A%84slabs%E5%92%8Ccas%E7%9A%84%E4%BD%9C%E7%94%A8.html</guid>
       </item>
     
       <item>
@@ -322,18 +291,8 @@ int daemonize(int nochdir, int noclose)
 &lt;a href=&quot;http://alfred-sun.github.io/blog/2015/06/18/daemon-implementation/&quot;&gt;Linux 守护进程的实现&lt;/a&gt;&lt;/p&gt;
 </description>
         <pubDate>Tue, 10 Jan 2017 00:42:00 +0800</pubDate>
-        <link>http://localhost:4000/2017/01/10/Memcached%E4%B8%AD%E7%9A%84%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%AE%9E%E7%8E%B0.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2017/01/10/Memcached%E4%B8%AD%E7%9A%84%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%AE%9E%E7%8E%B0.html</guid>
-        
-        <category>memcached</category>
-        
-        <category>C/C++</category>
-        
-        <category>linux</category>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2017/01/10/Memcached%E4%B8%AD%E7%9A%84%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%AE%9E%E7%8E%B0.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2017/01/10/Memcached%E4%B8%AD%E7%9A%84%E5%AE%88%E6%8A%A4%E8%BF%9B%E7%A8%8B%E5%AE%9E%E7%8E%B0.html</guid>
       </item>
     
       <item>
@@ -363,16 +322,8 @@ int daemonize(int nochdir, int noclose)
 &lt;/ol&gt;
 </description>
         <pubDate>Sun, 18 Dec 2016 00:33:02 +0800</pubDate>
-        <link>http://localhost:4000/2016/12/18/%E5%85%B3%E4%BA%8Elinux%E4%B8%ADSocket%E9%80%89%E9%A1%B9%E7%9A%84%E7%90%86%E8%A7%A3.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2016/12/18/%E5%85%B3%E4%BA%8Elinux%E4%B8%ADSocket%E9%80%89%E9%A1%B9%E7%9A%84%E7%90%86%E8%A7%A3.html</guid>
-        
-        <category>linux</category>
-        
-        <category>network</category>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2016/12/18/%E5%85%B3%E4%BA%8Elinux%E4%B8%ADSocket%E9%80%89%E9%A1%B9%E7%9A%84%E7%90%86%E8%A7%A3.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2016/12/18/%E5%85%B3%E4%BA%8Elinux%E4%B8%ADSocket%E9%80%89%E9%A1%B9%E7%9A%84%E7%90%86%E8%A7%A3.html</guid>
       </item>
     
       <item>
@@ -658,12 +609,8 @@ C++ 文件要以 .cc 结尾, 头文件以 .h 结尾. 通常应尽量让文件名
 
 </description>
         <pubDate>Sat, 10 Dec 2016 18:16:09 +0800</pubDate>
-        <link>http://localhost:4000/2016/12/10/Google%E7%9A%84C++%E7%BC%96%E7%A0%81%E9%A3%8E%E6%A0%BCTips.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2016/12/10/Google%E7%9A%84C++%E7%BC%96%E7%A0%81%E9%A3%8E%E6%A0%BCTips.html</guid>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2016/12/10/Google%E7%9A%84C++%E7%BC%96%E7%A0%81%E9%A3%8E%E6%A0%BCTips.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2016/12/10/Google%E7%9A%84C++%E7%BC%96%E7%A0%81%E9%A3%8E%E6%A0%BCTips.html</guid>
       </item>
     
       <item>
@@ -752,16 +699,8 @@ sr1.type_dependent(); // 调用 double foo(double);
 &lt;p&gt;另外用于RTTI机制的这些运算符的具体的运行时间得看输入的指针或者reference所指代的对象是否是多态的。如果是则会在运行时期才能取得其类型信息，否则则会静态取得。&lt;/p&gt;
 </description>
         <pubDate>Fri, 09 Dec 2016 19:08:21 +0800</pubDate>
-        <link>http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-7.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-7.html</guid>
-        
-        <category>C++</category>
-        
-        <category>memory</category>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-7.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-7.html</guid>
       </item>
     
       <item>
@@ -817,16 +756,8 @@ sr1.type_dependent(); // 调用 double foo(double);
 &lt;p&gt;如果class 没有定义destructor，那么只有在class内含的member object（或class自己的base class）拥有destructor的情况下，编译器才会自动合成出一个来。&lt;/p&gt;
 </description>
         <pubDate>Fri, 09 Dec 2016 04:17:50 +0800</pubDate>
-        <link>http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-5.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-5.html</guid>
-        
-        <category>C++</category>
-        
-        <category>memory</category>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-5.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-5.html</guid>
       </item>
     
       <item>
@@ -893,16 +824,8 @@ Placement operator new执行以下两项操作。&lt;/p&gt;
 &lt;/blockquote&gt;
 </description>
         <pubDate>Fri, 09 Dec 2016 00:24:36 +0800</pubDate>
-        <link>http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-6.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-6.html</guid>
-        
-        <category>C++</category>
-        
-        <category>memory</category>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-6.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2016/12/09/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-6.html</guid>
       </item>
     
       <item>
@@ -986,16 +909,8 @@ private:
 &lt;p&gt;如果当前类有个基类，且基类定义了相应的copy constructor，如果在定义当前类的copy constructor时没有在初始化列表中调用基类的copy constructor，编译器会在当前的copy constructor中插入基类的默认构造函数，显然这是不对的。因此一定要记得在copy constructor的初始化成员列表中调用基类的copy constructor（如果基类定义了copy constructor）。&lt;/p&gt;
 </description>
         <pubDate>Wed, 07 Dec 2016 22:05:46 +0800</pubDate>
-        <link>http://localhost:4000/2016/12/07/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-2.html</link>
-        <guid isPermaLink="true">http://localhost:4000/2016/12/07/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-2.html</guid>
-        
-        <category>C++</category>
-        
-        <category>memory</category>
-        
-        
-        <category>programming</category>
-        
+        <link>http://localhost:4000//2016/12/07/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-2.html</link>
+        <guid isPermaLink="true">http://localhost:4000//2016/12/07/%E6%B7%B1%E5%85%A5%E6%8E%A2%E7%B4%A2C++%E5%AF%B9%E8%B1%A1%E6%A8%A1%E5%9E%8B-2.html</guid>
       </item>
     
   </channel>

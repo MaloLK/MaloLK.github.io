@@ -5,9 +5,9 @@ meta_description: "@malolk Liu Kai's blog"
 permalink: /:year/:month/:day/:title.html
 paginate: 15
 markdown: kramdown
-highlighter: pygments
+highlighter: rouge
 logo: false
-baseurl: ""
+baseurl: /
 imgurl: "https://github.com/malolk/malolk.github.io/tree/master/_images"
 domain_name: 'http://malolk.com'
 gems: [jekyll-paginate]

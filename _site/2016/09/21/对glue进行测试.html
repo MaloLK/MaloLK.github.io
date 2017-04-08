@@ -21,8 +21,8 @@
 
     <header class="main-header post-head no-cover">
     <nav class="main-nav  clearfix">
-        <a class="back-button icon-arrow-left" href="">Home</a>
-        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+        <a class="back-button icon-arrow-left" href="/">Home</a>
+        <a class="subscribe-button icon-feed" href="/feed.xml">Subscribe</a>
     </nav>
 </header>
 
@@ -69,7 +69,7 @@
 
 <h5 id="测试结果">测试结果</h5>
 
-<p><img src="../_images/throughput-performance.bmp" alt="throughput-performance" /></p>
+<center><img src="/assets/images/throughput-performance.bmp" style="width: 700px;" /></center>
 
 <p>从图中可以看出， 随着并发的clients的数目增加，吞吐量有所下降，可以归结于epoll的内部实现，活动的clients增加会导致epoll_wait返回时需要从内核拷贝到用户态的文件描述符信息增加，同时，在一次循环中需要处理的事件数量增加，因此处理事件时间变长，但是由于用户数增加，所传送数据也会增加，因此整个的吞吐量也不会太低。从图中可以看到，当客户端并发连接数为20000时，ping-pong server也有将近1GiB/s的吞吐量。</p>
 
@@ -80,9 +80,9 @@
 
 <h5 id="测试结果-1">测试结果</h5>
 
-<p><img src="../_images/event-process-100-clients.bmp" alt="event-process-100-clients" /></p>
+<center><img src="/assets/images/event-process-100-clients.bmp" style="width: 700px;" /></center>
 
-<p><img src="../_images/event-process-1000-clients.bmp" alt="event-process-1000-clients" /></p>
+<center><img src="/assets/images/event-process-1000-clients.bmp" style="width: 700px;" /></center>
 
 <p>通过上面两幅图可以看出，glue的事件处理时间在100和1000个clients中均少于libevent处理相应事件所需要的时间。</p>
 
@@ -100,7 +100,7 @@
             <!-- If we want to display author's name and bio -->
             
                 <figure class="author-image">
-                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <a class="img" href="/" style="background-image: url(/assets/images/profile.png)">
                     <span class="hidden">Liu Kai's Picture</span></a>
                 </figure>
                 <section class="author">
@@ -131,7 +131,27 @@
 </section>
 
             <!-- Disqus comments -->
-            
+                <div id="disqus_thread"></div>
+<script>
+
+/**
+*  RECOMMENDED CONFIGURATION VARIABLES: EDIT AND UNCOMMENT THE SECTION BELOW TO INSERT DYNAMIC VALUES FROM YOUR PLATFORM OR CMS.
+*  LEARN WHY DEFINING THESE VARIABLES IS IMPORTANT: https://disqus.com/admin/universalcode/#configuration-variables*/
+/*
+var disqus_config = function () {
+this.page.url = PAGE_URL;  // Replace PAGE_URL with your page's canonical URL variable
+this.page.identifier = PAGE_IDENTIFIER; // Replace PAGE_IDENTIFIER with your page's unique identifier variable
+};
+*/
+(function() { // DON'T EDIT BELOW THIS LINE
+var d = document, s = d.createElement('script');
+s.src = 'https://malolk.disqus.com/embed.js';
+s.setAttribute('data-timestamp', +new Date());
+(d.head || d.body).appendChild(s);
+})();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+                                
 
         </footer>
 
@@ -141,7 +161,7 @@
 
     <footer class="site-footer clearfix">
       <section class="copyright">
-        <a href="">@malolk</a> &copy; 
+        <a href="/">@malolk</a> &copy; 
                &bull; All rights reserved.
       </section>
       <section class="poweredby">Made with Jekyll using 

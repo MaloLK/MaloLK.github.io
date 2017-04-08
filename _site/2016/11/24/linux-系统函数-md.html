@@ -21,8 +21,8 @@
 
     <header class="main-header post-head no-cover">
     <nav class="main-nav  clearfix">
-        <a class="back-button icon-arrow-left" href="">Home</a>
-        <a class="subscribe-button icon-feed" href="feed.xml">Subscribe</a>
+        <a class="back-button icon-arrow-left" href="/">Home</a>
+        <a class="subscribe-button icon-feed" href="/feed.xml">Subscribe</a>
     </nav>
 </header>
 
@@ -126,7 +126,7 @@ int main() {
             <!-- If we want to display author's name and bio -->
             
                 <figure class="author-image">
-                    <a class="img" href="" style="background-image: url(/assets/images/profile.png)">
+                    <a class="img" href="/" style="background-image: url(/assets/images/profile.png)">
                     <span class="hidden">Liu Kai's Picture</span></a>
                 </figure>
                 <section class="author">
@@ -157,7 +157,27 @@ int main() {
 </section>
 
             <!-- Disqus comments -->
-            
+                <div id="disqus_thread"></div>
+<script>
+
+/**
+*  RECOMMENDED CONFIGURATION VARIABLES: EDIT AND UNCOMMENT THE SECTION BELOW TO INSERT DYNAMIC VALUES FROM YOUR PLATFORM OR CMS.
+*  LEARN WHY DEFINING THESE VARIABLES IS IMPORTANT: https://disqus.com/admin/universalcode/#configuration-variables*/
+/*
+var disqus_config = function () {
+this.page.url = PAGE_URL;  // Replace PAGE_URL with your page's canonical URL variable
+this.page.identifier = PAGE_IDENTIFIER; // Replace PAGE_IDENTIFIER with your page's unique identifier variable
+};
+*/
+(function() { // DON'T EDIT BELOW THIS LINE
+var d = document, s = d.createElement('script');
+s.src = 'https://malolk.disqus.com/embed.js';
+s.setAttribute('data-timestamp', +new Date());
+(d.head || d.body).appendChild(s);
+})();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+                                
 
         </footer>
 
@@ -167,7 +187,7 @@ int main() {
 
     <footer class="site-footer clearfix">
       <section class="copyright">
-        <a href="">@malolk</a> &copy; 
+        <a href="/">@malolk</a> &copy; 
                &bull; All rights reserved.
       </section>
       <section class="poweredby">Made with Jekyll using 
