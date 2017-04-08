@@ -62,8 +62,9 @@
 
 <h4 id="linux虚拟地址空间布局">Linux虚拟地址空间布局</h4>
 
-<p><img src="https://github.com/malolk/malolk.github.io/blob/master/_images/memory-layout.jpg" alt="memory-layout" />
-虚拟地址空间分为两块区域：其中地址较高的块区域为内核进程地址区域，所有的虚拟地址进程中的内核进程地址区域映射的物理地址是一样的；较低地址的一块区域是用户进程虚拟地址区域，不同的进程通过页表映射的物理地址是不一样的。</p>
+<p><img src="/assets/images/memory-layout.jpg" alt="memory-layout" /></p>
+
+<p>虚拟地址空间分为两块区域：其中地址较高的块区域为内核进程地址区域，所有的虚拟地址进程中的内核进程地址区域映射的物理地址是一样的；较低地址的一块区域是用户进程虚拟地址区域，不同的进程通过页表映射的物理地址是不一样的。</p>
 
 <p>用户进程地址空间分为以下几类空间：内核空间，栈，内存映射段，堆，BSS段，数据段和保留段。</p>
 <ul>
@@ -103,7 +104,7 @@ BSS段中在可执行文件中不会为变量预先分配空间，只会记录�
 
 <p>从上面的描述可以看出new操作符不管第一步中获得的地址的来源是什么，只要内存地址是有效的则可以在其上调用对象构造函数构造对象。可以试着在栈上空间中构造对象。</p>
 
-<p><img src="https://github.com/malolk/malolk.github.io/blob/master/_images/C++_memory01.png" alt="c++_new_uses" /></p>
+<p><img src="../_images/C++_memory01.png" alt="c++_new_uses" /></p>
 
 <p>从程序的注释中可以印证我们之前的描述。</p>
 
